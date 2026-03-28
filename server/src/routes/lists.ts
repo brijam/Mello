@@ -6,7 +6,7 @@ import { lists } from '../db/schema/lists.js';
 import { cards } from '../db/schema/cards.js';
 import { labels, cardLabels } from '../db/schema/labels.js';
 import { cardAssignments } from '../db/schema/card-assignments.js';
-import { boardMembers } from '../db/schema/boards.js';
+import { boards, boardMembers } from '../db/schema/boards.js';
 import { requireAuth, requireBoardRole } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors.js';
@@ -254,6 +254,10 @@ export async function listRoutes(app: FastifyInstance) {
       throw new ForbiddenError();
     }
 
+    // Verify target board exists
+    const [targetBoardRow] = await db.select().from(boards).where(eq(boards.id, targetBoardId));
+    if (!targetBoardRow) throw new NotFoundError('Target board');
+
     // Check user membership on target board (admin or normal)
     const [targetMember] = await db.select().from(boardMembers).where(
       and(eq(boardMembers.boardId, targetBoardId), eq(boardMembers.userId, request.userId!)),
@@ -261,11 +265,6 @@ export async function listRoutes(app: FastifyInstance) {
     if (!targetMember || !['admin', 'normal'].includes(targetMember.role)) {
       throw new ForbiddenError();
     }
-
-    // Verify target board exists
-    const { boards } = await import('../db/schema/boards.js');
-    const [targetBoard] = await db.select().from(boards).where(eq(boards.id, targetBoardId));
-    if (!targetBoard) throw new NotFoundError('Target board');
 
     // Get next position for the new list on target board
     const existingLists = await db.select({ position: lists.position })

@@ -16,7 +16,7 @@ import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { getNextPosition } from '../utils/position.js';
 import { broadcast } from '../utils/broadcast.js';
 import { WS_EVENTS } from '@mello/shared';
-import { boards } from '../db/schema/boards.js';
+import { boards, boardMembers } from '../db/schema/boards.js';
 import { createNotification } from '../utils/notifications.js';
 
 export async function cardRoutes(app: FastifyInstance) {
@@ -164,7 +164,6 @@ export async function cardRoutes(app: FastifyInstance) {
 
     if (isCrossBoard) {
       // Check membership on source board (admin or normal)
-      const { boardMembers } = await import('../db/schema/boards.js');
       const [sourceMember] = await db.select().from(boardMembers).where(
         and(eq(boardMembers.boardId, existingCard.boardId), eq(boardMembers.userId, request.userId!)),
       );

@@ -47,9 +47,10 @@ app.setErrorHandler((error, _request, reply) => {
   }
 
   // Handle Fastify/plugin errors with statusCode (e.g., multipart file size limit)
-  if (error.statusCode && error.statusCode !== 500) {
-    return reply.status(error.statusCode).send({
-      error: { code: error.code ?? 'ERROR', message: error.message },
+  const err = error as any;
+  if (err.statusCode && err.statusCode !== 500) {
+    return reply.status(err.statusCode).send({
+      error: { code: err.code ?? 'ERROR', message: err.message },
     });
   }
 
