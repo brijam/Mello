@@ -66,16 +66,21 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   addList: async (boardId, name) => {
     const data = await api.post<{ list: ListWithCards }>(`/boards/${boardId}/lists`, { name });
-    set((state) => ({ lists: [...state.lists, { ...data.list, cards: [] }] }));
+    set((state) => {
+      if (state.lists.some((l) => l.id === data.list.id)) return state;
+      return { lists: [...state.lists, { ...data.list, cards: [] }] };
+    });
   },
 
   addCard: async (listId, name) => {
     const data = await api.post<{ card: CardSummary }>(`/lists/${listId}/cards`, { name });
     const card = { ...data.card, labelIds: data.card.labelIds ?? [] };
     set((state) => ({
-      lists: state.lists.map((list) =>
-        list.id === listId ? { ...list, cards: [...list.cards, card] } : list,
-      ),
+      lists: state.lists.map((list) => {
+        if (list.id !== listId) return list;
+        if (list.cards.some((c) => c.id === card.id)) return list;
+        return { ...list, cards: [...list.cards, card] };
+      }),
     }));
   },
 
