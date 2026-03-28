@@ -37,6 +37,7 @@ interface BoardState {
   deleteList: (listId: string) => Promise<void>;
   updateCard: (cardId: string, data: { name?: string; description?: string | null }) => Promise<void>;
   moveCard: (cardId: string, listId: string, position: number) => Promise<void>;
+  toggleCardLabel: (cardId: string, labelId: string, added: boolean) => void;
   deleteCard: (cardId: string) => Promise<void>;
   moveCardLocally: (cardId: string, fromListId: string, toListId: string, newIndex: number) => number;
   moveListLocally: (listId: string, newIndex: number) => number;
@@ -106,6 +107,21 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   moveCard: async (cardId, listId, position) => {
     await api.post(`/cards/${cardId}/move`, { listId, position });
+  },
+
+  toggleCardLabel: (cardId, labelId, added) => {
+    set((state) => ({
+      lists: state.lists.map((list) => ({
+        ...list,
+        cards: list.cards.map((card) => {
+          if (card.id !== cardId) return card;
+          const labelIds = added
+            ? [...card.labelIds, labelId]
+            : card.labelIds.filter((id) => id !== labelId);
+          return { ...card, labelIds };
+        }),
+      })),
+    }));
   },
 
   moveCardLocally: (cardId, fromListId, toListId, newIndex) => {

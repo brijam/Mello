@@ -3,3 +3,5 @@ export * from './workspace.js';
 export * from './board.js';
 export * from './list.js';
 export * from './card.js';
+export * from './checklist.js';
+export * from './comment.js';

@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore.js';
 import { api } from '../api/client.js';
 import type { Board, Workspace } from '@mello/shared';
+import FontSizeSelector from '../components/common/FontSizeSelector.js';
 
 export default function WorkspacePage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -46,6 +47,7 @@ export default function WorkspacePage() {
       <header className="bg-mello-blue-dark text-white px-6 py-3 flex items-center justify-between">
         <h1 className="text-xl font-bold">Mello</h1>
         <div className="flex items-center gap-4">
+          <FontSizeSelector />
           <span className="text-sm">{user?.displayName}</span>
           <button onClick={handleLogout} className="text-sm hover:underline opacity-80">
             Logout

@@ -2,6 +2,10 @@ import { useState, useEffect, useRef } from 'react';
 import { api } from '../../api/client.js';
 import { useBoardStore } from '../../stores/boardStore.js';
 import MarkdownRenderer from './MarkdownRenderer.js';
+import LabelPicker from './LabelPicker.js';
+import LabelBadge from '../board/LabelBadge.js';
+import CardChecklist from './CardChecklist.js';
+import CardComments from './CardComments.js';
 
 interface CardDetailData {
   id: string;
@@ -14,7 +18,12 @@ interface CardDetailData {
   updatedAt: string;
   labels: { id: string; name: string; color: string }[];
   members: { id: string; username: string; displayName: string; avatarUrl: string | null }[];
-  checklists: unknown[];
+  checklists: {
+    id: string;
+    name: string;
+    position: number;
+    items: { id: string; name: string; checked: boolean; position: number }[];
+  }[];
   attachments: unknown[];
   commentCount: number;
 }
@@ -39,13 +48,32 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
   const [descValue, setDescValue] = useState('');
   const descTextareaRef = useRef<HTMLTextAreaElement>(null);
 
+  // Label picker
+  const [showLabelPicker, setShowLabelPicker] = useState(false);
+  const labelBtnRef = useRef<HTMLButtonElement>(null);
+
   const lists = useBoardStore((s) => s.lists);
+  const labels = useBoardStore((s) => s.labels);
   const deleteCardStore = useBoardStore((s) => s.deleteCard);
   const updateCardStore = useBoardStore((s) => s.updateCard);
+  const toggleCardLabelStore = useBoardStore((s) => s.toggleCardLabel);
 
   const listName = card ? lists.find((l) => l.id === card.listId)?.name ?? 'Unknown list' : '';
 
   // Fetch card detail
+  const fetchCard = async () => {
+    try {
+      const data = await api.get<{ card: CardDetailData }>(`/cards/${cardId}`);
+      setCard(data.card);
+      setTitleValue(data.card.name);
+      setDescValue(data.card.description ?? '');
+      setLoading(false);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to load card');
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
@@ -117,6 +145,17 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
     try {
       await deleteCardStore(cardId);
       onClose();
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleAddChecklist = async () => {
+    const name = prompt('Checklist name:');
+    if (!name?.trim()) return;
+    try {
+      await api.post(`/cards/${cardId}/checklists`, { name: name.trim() });
+      await fetchCard();
     } catch {
       // ignore
     }
@@ -242,20 +281,30 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
             )}
           </section>
 
-          {/* Placeholder sections */}
-          <section className="mb-6">
-            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
-              Labels
-            </h3>
-            <p className="text-sm text-gray-400">Coming soon</p>
-          </section>
+          {/* Labels */}
+          {card.labels.length > 0 && (
+            <section className="mb-6">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
+                Labels
+              </h3>
+              <div className="flex flex-wrap gap-1.5">
+                {card.labels.map((label) => (
+                  <LabelBadge key={label.id} color={label.color} name={label.name} size="md" />
+                ))}
+              </div>
+            </section>
+          )}
 
-          <section className="mb-6">
-            <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
-              Checklists
-            </h3>
-            <p className="text-sm text-gray-400">Coming soon</p>
-          </section>
+          {card.checklists.length > 0 && (
+            <section className="mb-6">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
+                Checklists
+              </h3>
+              {card.checklists.map((cl) => (
+                <CardChecklist key={cl.id} checklist={cl} onUpdate={fetchCard} />
+              ))}
+            </section>
+          )}
 
           <section className="mb-6">
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
@@ -268,9 +317,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
               Activity
             </h3>
-            <p className="text-sm text-gray-400">
-              {card.commentCount} comment{card.commentCount !== 1 ? 's' : ''} — Coming soon
-            </p>
+            <CardComments cardId={card.id} />
           </section>
         </div>
 
@@ -283,10 +330,48 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
             <button className="text-left text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded">
               Members
             </button>
-            <button className="text-left text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded">
-              Labels
-            </button>
-            <button className="text-left text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded">
+            <div className="relative">
+              <button
+                ref={labelBtnRef}
+                onClick={() => setShowLabelPicker((v) => !v)}
+                className="w-full text-left text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded"
+              >
+                Labels
+              </button>
+              {showLabelPicker && (
+                <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                  <LabelPicker
+                    cardId={card.id}
+                    boardId={card.boardId}
+                    cardLabelIds={card.labels.map((l) => l.id)}
+                    onToggle={(labelId, added) => {
+                      toggleCardLabelStore(card.id, labelId, added);
+                      // Update local card state
+                      setCard((prev) => {
+                        if (!prev) return prev;
+                        if (added) {
+                          const label = labels.find((l) => l.id === labelId);
+                          if (!label) return prev;
+                          return {
+                            ...prev,
+                            labels: [...prev.labels, { id: label.id, name: label.name ?? '', color: label.color }],
+                          };
+                        } else {
+                          return {
+                            ...prev,
+                            labels: prev.labels.filter((l) => l.id !== labelId),
+                          };
+                        }
+                      });
+                    }}
+                  />
+                </div>
+              )}
+            </div>
+            <button
+              onClick={handleAddChecklist}
+              className="text-left text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded"
+            >
               Checklist
             </button>
             <button className="text-left text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded">

@@ -10,7 +10,8 @@ import { requireAuth, requireBoardRole } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { getNextPosition } from '../utils/position.js';
-import { LABEL_COLORS } from '@mello/shared';
+import { LABEL_COLORS, WS_EVENTS } from '@mello/shared';
+import { broadcast } from '../utils/broadcast.js';
 
 export async function boardRoutes(app: FastifyInstance) {
   // Create board
@@ -145,6 +146,7 @@ export async function boardRoutes(app: FastifyInstance) {
       set: { role },
     });
 
+    broadcast(app.io, boardId, WS_EVENTS.MEMBER_ADDED, { boardId, userId, role });
     return reply.status(201).send({ ok: true });
   });
 
@@ -156,6 +158,7 @@ export async function boardRoutes(app: FastifyInstance) {
     await db.delete(boardMembers).where(
       and(eq(boardMembers.boardId, boardId), eq(boardMembers.userId, userId)),
     );
+    broadcast(app.io, boardId, WS_EVENTS.MEMBER_REMOVED, { boardId, userId });
     return reply.status(204).send();
   });
 
@@ -180,6 +183,7 @@ export async function boardRoutes(app: FastifyInstance) {
       position,
     }).returning();
 
+    broadcast(app.io, boardId, WS_EVENTS.LABEL_CREATED, { label });
     return reply.status(201).send({ label });
   });
 
@@ -195,6 +199,9 @@ export async function boardRoutes(app: FastifyInstance) {
       .where(eq(labels.id, labelId))
       .returning();
 
+    if (label) {
+      broadcast(app.io, label.boardId, WS_EVENTS.LABEL_UPDATED, { label });
+    }
     return { label };
   });
 
@@ -202,7 +209,11 @@ export async function boardRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
   }, async (request, reply) => {
     const { labelId } = request.params as { labelId: string };
+    const [label] = await db.select().from(labels).where(eq(labels.id, labelId));
     await db.delete(labels).where(eq(labels.id, labelId));
+    if (label) {
+      broadcast(app.io, label.boardId, WS_EVENTS.LABEL_DELETED, { labelId });
+    }
     return reply.status(204).send();
   });
 }

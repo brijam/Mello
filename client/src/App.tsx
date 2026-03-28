@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore.js';
+import { useSettingsStore, fontSizeMap } from './stores/settingsStore.js';
 import LoginPage from './pages/LoginPage.js';
 import RegisterPage from './pages/RegisterPage.js';
 import HomePage from './pages/HomePage.js';
@@ -16,10 +17,16 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 
 export default function App() {
   const { fetchMe } = useAuthStore();
+  const fontSize = useSettingsStore((s) => s.fontSize);
 
   useEffect(() => {
     fetchMe();
   }, [fetchMe]);
+
+  // Apply font size to <html> element so all rem-based sizing scales
+  useEffect(() => {
+    document.documentElement.style.fontSize = `${fontSizeMap[fontSize]}px`;
+  }, [fontSize]);
 
   return (
     <Routes>

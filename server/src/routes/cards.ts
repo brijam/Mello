@@ -14,6 +14,8 @@ import { requireAuth } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { NotFoundError } from '../utils/errors.js';
 import { getNextPosition } from '../utils/position.js';
+import { broadcast } from '../utils/broadcast.js';
+import { WS_EVENTS } from '@mello/shared';
 
 export async function cardRoutes(app: FastifyInstance) {
   // Create card
@@ -46,6 +48,7 @@ export async function cardRoutes(app: FastifyInstance) {
       position: pos,
     }).returning();
 
+    broadcast(app.io, list.boardId, WS_EVENTS.CARD_CREATED, { card: { ...card, labelIds: [] } });
     return reply.status(201).send({ card });
   });
 
@@ -125,6 +128,7 @@ export async function cardRoutes(app: FastifyInstance) {
       .returning();
 
     if (!card) throw new NotFoundError('Card');
+    broadcast(app.io, card.boardId, WS_EVENTS.CARD_UPDATED, { card });
     return { card };
   });
 
@@ -133,7 +137,11 @@ export async function cardRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
   }, async (request, reply) => {
     const { cardId } = request.params as { cardId: string };
+    const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
     await db.delete(cards).where(eq(cards.id, cardId));
+    if (card) {
+      broadcast(app.io, card.boardId, WS_EVENTS.CARD_DELETED, { cardId, listId: card.listId });
+    }
     return reply.status(204).send();
   });
 
@@ -163,6 +171,7 @@ export async function cardRoutes(app: FastifyInstance) {
       .returning();
 
     if (!card) throw new NotFoundError('Card');
+    broadcast(app.io, card.boardId, WS_EVENTS.CARD_MOVED, { card });
     return { card };
   });
 
@@ -172,6 +181,10 @@ export async function cardRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const { cardId, labelId } = request.params as { cardId: string; labelId: string };
     await db.insert(cardLabels).values({ cardId, labelId }).onConflictDoNothing();
+    const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
+    if (card) {
+      broadcast(app.io, card.boardId, WS_EVENTS.CARD_UPDATED, { card, labelId, labelAction: 'added' });
+    }
     return reply.status(201).send({ ok: true });
   });
 
@@ -179,9 +192,13 @@ export async function cardRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
   }, async (request, reply) => {
     const { cardId, labelId } = request.params as { cardId: string; labelId: string };
+    const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
     await db.delete(cardLabels).where(
       and(eq(cardLabels.cardId, cardId), eq(cardLabels.labelId, labelId)),
     );
+    if (card) {
+      broadcast(app.io, card.boardId, WS_EVENTS.CARD_UPDATED, { card, labelId, labelAction: 'removed' });
+    }
     return reply.status(204).send();
   });
 

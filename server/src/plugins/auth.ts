@@ -73,4 +73,17 @@ declare module 'fastify' {
   }
 }
 
+export function getSessionUserId(sessionId: string): string | null {
+  const session = sessions.get(sessionId);
+  if (session && session.expiresAt > Date.now()) {
+    return session.userId;
+  }
+  if (session) {
+    sessions.delete(sessionId);
+  }
+  return null;
+}
+
+export const COOKIE_NAME_EXPORT = COOKIE_NAME;
+
 export default fp(authPlugin, { name: 'auth' });

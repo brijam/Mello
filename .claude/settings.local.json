@@ -40,7 +40,8 @@
       "Bash(PGPASSWORD='changeme' \"/c/Program Files/PostgreSQL/18/bin/psql.exe\" -U mello -h localhost -d postgres -c \"CREATE DATABASE mello OWNER mello\" 2>&1)",
       "Bash(pkill -f \"tsx watch\")",
       "Bash(pkill -f \"tsx src/index\")",
-      "Bash(pkill -f \"vite\")"
+      "Bash(pkill -f \"vite\")",
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npm test --workspace=server)"
     ]
   }
 }

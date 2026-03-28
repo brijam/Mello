@@ -2,6 +2,7 @@ import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import authPlugin from './plugins/auth.js';
+import socketPlugin from './plugins/socket.js';
 import { config } from './config.js';
 import { AppError } from './utils/errors.js';
 
@@ -11,6 +12,8 @@ import { workspaceRoutes } from './routes/workspaces.js';
 import { boardRoutes } from './routes/boards.js';
 import { listRoutes } from './routes/lists.js';
 import { cardRoutes } from './routes/cards.js';
+import { checklistRoutes } from './routes/checklists.js';
+import { commentRoutes } from './routes/comments.js';
 
 const app = Fastify({
   logger: {
@@ -28,6 +31,7 @@ await app.register(cors, {
 });
 await app.register(cookie);
 await app.register(authPlugin);
+await app.register(socketPlugin);
 
 // Error handler
 app.setErrorHandler((error, _request, reply) => {
@@ -49,6 +53,8 @@ await app.register(workspaceRoutes, { prefix: '/api/v1/workspaces' });
 await app.register(boardRoutes, { prefix: '/api/v1' });
 await app.register(listRoutes, { prefix: '/api/v1' });
 await app.register(cardRoutes, { prefix: '/api/v1' });
+await app.register(checklistRoutes, { prefix: '/api/v1' });
+await app.register(commentRoutes, { prefix: '/api/v1' });
 
 // Health check
 app.get('/api/health', async () => ({ status: 'ok' }));

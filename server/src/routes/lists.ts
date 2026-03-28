@@ -9,6 +9,8 @@ import { requireAuth, requireBoardRole } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { NotFoundError } from '../utils/errors.js';
 import { getNextPosition } from '../utils/position.js';
+import { broadcast } from '../utils/broadcast.js';
+import { WS_EVENTS } from '@mello/shared';
 
 export async function listRoutes(app: FastifyInstance) {
   // Get lists with cards for a board
@@ -85,6 +87,7 @@ export async function listRoutes(app: FastifyInstance) {
       position: pos,
     }).returning();
 
+    broadcast(app.io, boardId, WS_EVENTS.LIST_CREATED, { list: { ...list, cards: [] } });
     return reply.status(201).send({ list });
   });
 
@@ -102,6 +105,7 @@ export async function listRoutes(app: FastifyInstance) {
       .returning();
 
     if (!list) throw new NotFoundError('List');
+    broadcast(app.io, list.boardId, WS_EVENTS.LIST_UPDATED, { list });
     return { list };
   });
 
@@ -110,7 +114,11 @@ export async function listRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
   }, async (request, reply) => {
     const { listId } = request.params as { listId: string };
+    const [list] = await db.select().from(lists).where(eq(lists.id, listId));
     await db.delete(lists).where(eq(lists.id, listId));
+    if (list) {
+      broadcast(app.io, list.boardId, WS_EVENTS.LIST_DELETED, { listId });
+    }
     return reply.status(204).send();
   });
 

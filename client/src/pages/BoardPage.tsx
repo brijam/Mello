@@ -17,14 +17,17 @@ import {
 } from '@dnd-kit/sortable';
 import { useBoardStore } from '../stores/boardStore.js';
 import { useAuthStore } from '../stores/authStore.js';
+import { useBoardSync } from '../hooks/useBoardSync.js';
 import List from '../components/board/List.js';
 import AddList from '../components/board/AddList.js';
+import FontSizeSelector from '../components/common/FontSizeSelector.js';
 
 export default function BoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
   const navigate = useNavigate();
   const { board, lists, loading, fetchBoard, clear, moveCard, moveCardLocally, moveListLocally, updateList } = useBoardStore();
   const { user, logout } = useAuthStore();
+  useBoardSync(boardId);
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<'card' | 'list' | null>(null);
@@ -229,6 +232,7 @@ export default function BoardPage() {
           <h1 className="text-lg font-bold">{board.name}</h1>
         </div>
         <div className="flex items-center gap-4">
+          <FontSizeSelector />
           <span className="text-sm">{user?.displayName}</span>
           <button onClick={handleLogout} className="text-sm hover:underline opacity-80">
             Logout

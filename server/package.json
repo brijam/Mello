@@ -8,7 +8,9 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "migrate": "drizzle-kit migrate",
-    "generate": "drizzle-kit generate"
+    "generate": "drizzle-kit generate",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@fastify/cookie": "^11.0.0",
@@ -30,6 +32,9 @@
   },
   "devDependencies": {
     "@types/node": "^22.0.0",
+    "@types/supertest": "^7.2.0",
+    "supertest": "^7.2.2",
+    "vitest": "^4.1.2",
     "drizzle-kit": "^0.30.4",
     "tsx": "^4.19.0",
     "typescript": "^5.5.0"
