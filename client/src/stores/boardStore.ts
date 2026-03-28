@@ -19,6 +19,7 @@ interface CardSummary {
   name: string;
   description: string | null;
   position: number;
+  labelIds: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -37,6 +38,8 @@ interface BoardState {
   updateCard: (cardId: string, data: { name?: string; description?: string | null }) => Promise<void>;
   moveCard: (cardId: string, listId: string, position: number) => Promise<void>;
   deleteCard: (cardId: string) => Promise<void>;
+  moveCardLocally: (cardId: string, fromListId: string, toListId: string, newIndex: number) => number;
+  moveListLocally: (listId: string, newIndex: number) => number;
   clear: () => void;
 }
 
@@ -67,9 +70,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   addCard: async (listId, name) => {
     const data = await api.post<{ card: CardSummary }>(`/lists/${listId}/cards`, { name });
+    const card = { ...data.card, labelIds: data.card.labelIds ?? [] };
     set((state) => ({
       lists: state.lists.map((list) =>
-        list.id === listId ? { ...list, cards: [...list.cards, data.card] } : list,
+        list.id === listId ? { ...list, cards: [...list.cards, card] } : list,
       ),
     }));
   },
@@ -102,6 +106,85 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   moveCard: async (cardId, listId, position) => {
     await api.post(`/cards/${cardId}/move`, { listId, position });
+  },
+
+  moveCardLocally: (cardId, fromListId, toListId, newIndex) => {
+    const state = get();
+    const fromList = state.lists.find((l) => l.id === fromListId);
+    const toList = state.lists.find((l) => l.id === toListId);
+    if (!fromList || !toList) return 0;
+
+    const card = fromList.cards.find((c) => c.id === cardId);
+    if (!card) return 0;
+
+    // Remove from source
+    const fromCards = fromList.cards.filter((c) => c.id !== cardId);
+
+    // Build sorted destination cards (without the moved card)
+    const toCards = fromListId === toListId
+      ? fromCards.sort((a, b) => a.position - b.position)
+      : [...toList.cards].sort((a, b) => a.position - b.position);
+
+    // Calculate new position
+    let newPosition: number;
+    if (toCards.length === 0) {
+      newPosition = 65536;
+    } else if (newIndex === 0) {
+      newPosition = toCards[0].position / 2;
+    } else if (newIndex >= toCards.length) {
+      newPosition = toCards[toCards.length - 1].position + 65536;
+    } else {
+      newPosition = (toCards[newIndex - 1].position + toCards[newIndex].position) / 2;
+    }
+
+    const movedCard = { ...card, listId: toListId, position: newPosition };
+
+    // Insert into destination
+    const newToCards = [...toCards];
+    newToCards.splice(newIndex, 0, movedCard);
+
+    set((state) => ({
+      lists: state.lists.map((list) => {
+        if (list.id === fromListId && fromListId !== toListId) {
+          return { ...list, cards: fromCards };
+        }
+        if (list.id === toListId) {
+          return { ...list, cards: fromListId === toListId ? newToCards : newToCards };
+        }
+        return list;
+      }),
+    }));
+
+    return newPosition;
+  },
+
+  moveListLocally: (listId, newIndex) => {
+    const state = get();
+    const sorted = [...state.lists].sort((a, b) => a.position - b.position);
+    const currentIndex = sorted.findIndex((l) => l.id === listId);
+    if (currentIndex === -1) return 0;
+
+    // Remove list and compute new position
+    const without = sorted.filter((l) => l.id !== listId);
+
+    let newPosition: number;
+    if (without.length === 0) {
+      newPosition = 65536;
+    } else if (newIndex === 0) {
+      newPosition = without[0].position / 2;
+    } else if (newIndex >= without.length) {
+      newPosition = without[without.length - 1].position + 65536;
+    } else {
+      newPosition = (without[newIndex - 1].position + without[newIndex].position) / 2;
+    }
+
+    set((state) => ({
+      lists: state.lists.map((list) =>
+        list.id === listId ? { ...list, position: newPosition } : list,
+      ),
+    }));
+
+    return newPosition;
   },
 
   deleteCard: async (cardId) => {

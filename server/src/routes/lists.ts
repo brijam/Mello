@@ -1,9 +1,10 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and, asc } from 'drizzle-orm';
+import { eq, and, asc, inArray } from 'drizzle-orm';
 import { createListSchema, updateListSchema, moveAllCardsSchema } from '@mello/shared';
 import { db } from '../db/index.js';
 import { lists } from '../db/schema/lists.js';
 import { cards } from '../db/schema/cards.js';
+import { cardLabels } from '../db/schema/labels.js';
 import { requireAuth, requireBoardRole } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { NotFoundError } from '../utils/errors.js';
@@ -28,11 +29,29 @@ export async function listRoutes(app: FastifyInstance) {
       .where(eq(cards.boardId, boardId))
       .orderBy(asc(cards.position));
 
+    // Fetch card-label associations for all cards on this board
+    const cardIds = boardCards.map((c) => c.id);
+    let cardLabelRows: { cardId: string; labelId: string }[] = [];
+    if (cardIds.length > 0) {
+      cardLabelRows = await db
+        .select({ cardId: cardLabels.cardId, labelId: cardLabels.labelId })
+        .from(cardLabels)
+        .where(inArray(cardLabels.cardId, cardIds));
+    }
+
+    // Build a map of cardId -> labelId[]
+    const labelsByCard = new Map<string, string[]>();
+    for (const row of cardLabelRows) {
+      const arr = labelsByCard.get(row.cardId) ?? [];
+      arr.push(row.labelId);
+      labelsByCard.set(row.cardId, arr);
+    }
+
     // Group cards by list
-    const cardsByList = new Map<string, typeof boardCards>();
+    const cardsByList = new Map<string, (typeof boardCards[number] & { labelIds: string[] })[]>();
     for (const card of boardCards) {
       const listCards = cardsByList.get(card.listId) ?? [];
-      listCards.push(card);
+      listCards.push({ ...card, labelIds: labelsByCard.get(card.id) ?? [] });
       cardsByList.set(card.listId, listCards);
     }
 
