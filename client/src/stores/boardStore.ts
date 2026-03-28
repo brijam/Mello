@@ -24,13 +24,19 @@ interface CardSummary {
   updatedAt: string;
 }
 
+interface BoardFilterParams {
+  labels?: string[];
+  members?: string[];
+}
+
 interface BoardState {
   board: Board | null;
   lists: ListWithCards[];
   labels: Label[];
+  members: { id: string; displayName: string; username: string; avatarUrl: string | null }[];
   loading: boolean;
 
-  fetchBoard: (boardId: string) => Promise<void>;
+  fetchBoard: (boardId: string, filters?: BoardFilterParams) => Promise<void>;
   addList: (boardId: string, name: string) => Promise<void>;
   addCard: (listId: string, name: string) => Promise<void>;
   updateList: (listId: string, data: { name?: string; position?: number }) => Promise<void>;
@@ -48,17 +54,26 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   board: null,
   lists: [],
   labels: [],
+  members: [],
   loading: false,
 
-  fetchBoard: async (boardId) => {
+  fetchBoard: async (boardId, filters) => {
     set({ loading: true });
+    let listsUrl = `/boards/${boardId}/lists`;
+    const params = new URLSearchParams();
+    if (filters?.labels?.length) params.set('labels', filters.labels.join(','));
+    if (filters?.members?.length) params.set('members', filters.members.join(','));
+    const qs = params.toString();
+    if (qs) listsUrl += `?${qs}`;
+
     const [boardData, listData] = await Promise.all([
-      api.get<{ board: Board; labels: Label[] }>(`/boards/${boardId}`),
-      api.get<{ lists: ListWithCards[] }>(`/boards/${boardId}/lists`),
+      api.get<{ board: Board; labels: Label[]; members?: { id: string; displayName: string; username: string; avatarUrl: string | null }[] }>(`/boards/${boardId}`),
+      api.get<{ lists: ListWithCards[] }>(listsUrl),
     ]);
     set({
       board: boardData.board,
       labels: boardData.labels,
+      members: boardData.members ?? [],
       lists: listData.lists,
       loading: false,
     });
@@ -218,5 +233,5 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     }));
   },
 
-  clear: () => set({ board: null, lists: [], labels: [], loading: false }),
+  clear: () => set({ board: null, lists: [], labels: [], members: [], loading: false }),
 }));

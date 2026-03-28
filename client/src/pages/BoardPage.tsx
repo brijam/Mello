@@ -1,5 +1,5 @@
 import { useEffect, useState, useCallback, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   DndContext,
   DragOverlay,
@@ -18,19 +18,47 @@ import {
 import { useBoardStore } from '../stores/boardStore.js';
 import { useAuthStore } from '../stores/authStore.js';
 import { useBoardSync } from '../hooks/useBoardSync.js';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts.js';
 import List from '../components/board/List.js';
 import AddList from '../components/board/AddList.js';
 import FontSizeSelector from '../components/common/FontSizeSelector.js';
+import SearchBar from '../components/search/SearchBar.js';
+import NotificationBell from '../components/notifications/NotificationBell.js';
+import FilterBar from '../components/board/FilterBar.js';
+import Modal from '../components/common/Modal.js';
+import CardDetail from '../components/card/CardDetail.js';
+import KeyboardShortcutsHelp from '../components/common/KeyboardShortcutsHelp.js';
 
 export default function BoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
   const navigate = useNavigate();
-  const { board, lists, loading, fetchBoard, clear, moveCard, moveCardLocally, moveListLocally, updateList } = useBoardStore();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const { board, lists, labels, members, loading, fetchBoard, clear, moveCard, moveCardLocally, moveListLocally, updateList } = useBoardStore();
   const { user, logout } = useAuthStore();
   useBoardSync(boardId);
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<'card' | 'list' | null>(null);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+
+  // Keyboard shortcuts
+  useKeyboardShortcuts({ onShowHelp: () => setShowShortcutsHelp(true) });
+
+  // Card detail from URL
+  const cardIdFromUrl = searchParams.get('card');
+
+  // Filters from URL
+  const activeLabels = useMemo(() => {
+    const val = searchParams.get('labels');
+    return val ? val.split(',').filter(Boolean) : [];
+  }, [searchParams]);
+
+  const activeMembers = useMemo(() => {
+    const val = searchParams.get('members');
+    return val ? val.split(',').filter(Boolean) : [];
+  }, [searchParams]);
+
+  const hasFilters = activeLabels.length > 0 || activeMembers.length > 0;
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -39,9 +67,62 @@ export default function BoardPage() {
   );
 
   useEffect(() => {
-    if (boardId) fetchBoard(boardId);
+    if (boardId) {
+      const filters: { labels?: string[]; members?: string[] } = {};
+      if (activeLabels.length) filters.labels = activeLabels;
+      if (activeMembers.length) filters.members = activeMembers;
+      fetchBoard(boardId, Object.keys(filters).length ? filters : undefined);
+    }
     return () => clear();
-  }, [boardId, fetchBoard, clear]);
+  }, [boardId, fetchBoard, clear, activeLabels.join(','), activeMembers.join(',')]);
+
+  // Filter toggle handlers
+  const handleToggleLabel = useCallback(
+    (labelId: string) => {
+      const newParams = new URLSearchParams(searchParams);
+      const current = newParams.get('labels')?.split(',').filter(Boolean) ?? [];
+      const updated = current.includes(labelId)
+        ? current.filter((id) => id !== labelId)
+        : [...current, labelId];
+      if (updated.length) {
+        newParams.set('labels', updated.join(','));
+      } else {
+        newParams.delete('labels');
+      }
+      setSearchParams(newParams, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  const handleToggleMember = useCallback(
+    (memberId: string) => {
+      const newParams = new URLSearchParams(searchParams);
+      const current = newParams.get('members')?.split(',').filter(Boolean) ?? [];
+      const updated = current.includes(memberId)
+        ? current.filter((id) => id !== memberId)
+        : [...current, memberId];
+      if (updated.length) {
+        newParams.set('members', updated.join(','));
+      } else {
+        newParams.delete('members');
+      }
+      setSearchParams(newParams, { replace: true });
+    },
+    [searchParams, setSearchParams],
+  );
+
+  const handleClearFilters = useCallback(() => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('labels');
+    newParams.delete('members');
+    setSearchParams(newParams, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const handleCloseCardDetail = useCallback(() => {
+    const newParams = new URLSearchParams(searchParams);
+    newParams.delete('card');
+    setSearchParams(newParams, { replace: true });
+  }, [searchParams, setSearchParams]);
 
   const sortedLists = useMemo(
     () => [...lists].sort((a, b) => a.position - b.position),
@@ -231,14 +312,29 @@ export default function BoardPage() {
           </button>
           <h1 className="text-lg font-bold">{board.name}</h1>
         </div>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <SearchBar />
           <FontSizeSelector />
+          <NotificationBell />
           <span className="text-sm">{user?.displayName}</span>
           <button onClick={handleLogout} className="text-sm hover:underline opacity-80">
             Logout
           </button>
         </div>
       </header>
+
+      {/* Filter bar */}
+      {(hasFilters || labels.length > 0 || members.length > 0) && (
+        <FilterBar
+          labels={labels}
+          members={members}
+          activeLabels={activeLabels}
+          activeMembers={activeMembers}
+          onToggleLabel={handleToggleLabel}
+          onToggleMember={handleToggleMember}
+          onClearFilters={handleClearFilters}
+        />
+      )}
 
       <main className="flex-1 overflow-x-auto p-4">
         <DndContext
@@ -274,6 +370,15 @@ export default function BoardPage() {
           </DragOverlay>
         </DndContext>
       </main>
+
+      {/* Card detail modal opened via URL param */}
+      {cardIdFromUrl && (
+        <Modal isOpen={true} onClose={handleCloseCardDetail}>
+          <CardDetail cardId={cardIdFromUrl} onClose={handleCloseCardDetail} />
+        </Modal>
+      )}
+
+      <KeyboardShortcutsHelp isOpen={showShortcutsHelp} onClose={() => setShowShortcutsHelp(false)} />
     </div>
   );
 }

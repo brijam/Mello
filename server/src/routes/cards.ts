@@ -12,7 +12,7 @@ import { comments } from '../db/schema/comments.js';
 import { users } from '../db/schema/users.js';
 import { requireAuth } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
-import { NotFoundError } from '../utils/errors.js';
+import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { getNextPosition } from '../utils/position.js';
 import { broadcast } from '../utils/broadcast.js';
 import { WS_EVENTS } from '@mello/shared';
@@ -156,6 +156,37 @@ export async function cardRoutes(app: FastifyInstance) {
       listId: string; position: number; boardId?: string;
     };
 
+    // Fetch the card to know its current board
+    const [existingCard] = await db.select().from(cards).where(eq(cards.id, cardId));
+    if (!existingCard) throw new NotFoundError('Card');
+
+    const isCrossBoard = boardId && boardId !== existingCard.boardId;
+
+    if (isCrossBoard) {
+      // Check membership on source board (admin or normal)
+      const { boardMembers } = await import('../db/schema/boards.js');
+      const [sourceMember] = await db.select().from(boardMembers).where(
+        and(eq(boardMembers.boardId, existingCard.boardId), eq(boardMembers.userId, request.userId!)),
+      );
+      if (!sourceMember || !['admin', 'normal'].includes(sourceMember.role)) {
+        throw new ForbiddenError();
+      }
+
+      // Check membership on target board (admin or normal)
+      const [targetMember] = await db.select().from(boardMembers).where(
+        and(eq(boardMembers.boardId, boardId), eq(boardMembers.userId, request.userId!)),
+      );
+      if (!targetMember || !['admin', 'normal'].includes(targetMember.role)) {
+        throw new ForbiddenError();
+      }
+
+      // Verify the target list exists on the target board
+      const [targetList] = await db.select().from(lists).where(
+        and(eq(lists.id, listId), eq(lists.boardId, boardId)),
+      );
+      if (!targetList) throw new NotFoundError('Target list');
+    }
+
     const updateData: Record<string, unknown> = {
       listId,
       position,
@@ -173,6 +204,12 @@ export async function cardRoutes(app: FastifyInstance) {
       .returning();
 
     if (!card) throw new NotFoundError('Card');
+
+    // If cross-board move, clear label associations
+    if (isCrossBoard) {
+      await db.delete(cardLabels).where(eq(cardLabels.cardId, cardId));
+    }
+
     broadcast(app.io, card.boardId, WS_EVENTS.CARD_MOVED, { card });
     return { card };
   });

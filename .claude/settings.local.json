@@ -53,7 +53,8 @@
       "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" node -e \":*)",
       "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx tsx -e \":*)",
       "Read(//tmp/**)",
-      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/search.test.ts -t \"cursor\")"
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/search.test.ts -t \"cursor\")",
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/templates.test.ts src/tests/backgrounds.test.ts src/tests/copy-move.test.ts)"
     ]
   }
 }

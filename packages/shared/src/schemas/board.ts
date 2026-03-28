@@ -13,6 +13,12 @@ export const updateBoardSchema = z.object({
   description: z.string().max(1000).nullable().optional(),
   backgroundType: z.enum(['color', 'image']).optional(),
   backgroundValue: z.string().optional(),
+  isTemplate: z.boolean().optional(),
+});
+
+export const createFromTemplateSchema = z.object({
+  workspaceId: z.string().uuid(),
+  name: z.string().min(1).max(255),
 });
 
 export type CreateBoardInput = z.infer<typeof createBoardSchema>;

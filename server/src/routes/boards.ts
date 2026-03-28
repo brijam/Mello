@@ -1,18 +1,23 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and } from 'drizzle-orm';
-import { createBoardSchema, updateBoardSchema } from '@mello/shared';
+import { eq, and, asc } from 'drizzle-orm';
+import { createBoardSchema, updateBoardSchema, createFromTemplateSchema } from '@mello/shared';
 import { db } from '../db/index.js';
 import { boards, boardMembers } from '../db/schema/boards.js';
 import { workspaceMembers } from '../db/schema/workspaces.js';
 import { labels } from '../db/schema/labels.js';
+import { lists } from '../db/schema/lists.js';
+import { cards } from '../db/schema/cards.js';
 import { users } from '../db/schema/users.js';
 import { requireAuth, requireBoardRole } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
-import { NotFoundError, ForbiddenError } from '../utils/errors.js';
+import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors.js';
 import { getNextPosition } from '../utils/position.js';
 import { LABEL_COLORS, WS_EVENTS } from '@mello/shared';
 import { broadcast } from '../utils/broadcast.js';
 import { createNotification } from '../utils/notifications.js';
+import { config } from '../config.js';
+import * as fs from 'node:fs/promises';
+import * as path from 'node:path';
 
 export async function boardRoutes(app: FastifyInstance) {
   // Create board
@@ -68,7 +73,87 @@ export async function boardRoutes(app: FastifyInstance) {
     return reply.status(201).send({ board });
   });
 
-  // Get board with lists
+  // Create board from template — MUST be registered BEFORE /boards/:boardId
+  app.post('/boards/from-template/:templateId', {
+    preHandler: [requireAuth, validateBody(createFromTemplateSchema)],
+  }, async (request, reply) => {
+    const { templateId } = request.params as { templateId: string };
+    const body = request.body as { workspaceId: string; name: string };
+
+    // Find the template board
+    const [templateBoard] = await db.select().from(boards).where(eq(boards.id, templateId));
+    if (!templateBoard || !templateBoard.isTemplate) {
+      throw new NotFoundError('Template');
+    }
+
+    // Check workspace membership
+    const [wsMember] = await db
+      .select()
+      .from(workspaceMembers)
+      .where(and(
+        eq(workspaceMembers.workspaceId, body.workspaceId),
+        eq(workspaceMembers.userId, request.userId!),
+      ));
+    if (!wsMember) throw new ForbiddenError();
+
+    // Get position for new board
+    const existingBoards = await db
+      .select({ position: boards.position })
+      .from(boards)
+      .where(eq(boards.workspaceId, body.workspaceId))
+      .orderBy(boards.position);
+
+    const position = getNextPosition(existingBoards.at(-1)?.position);
+
+    // Create new board copying background settings from template
+    const [newBoard] = await db.insert(boards).values({
+      workspaceId: body.workspaceId,
+      name: body.name,
+      description: templateBoard.description,
+      backgroundType: templateBoard.backgroundType,
+      backgroundValue: templateBoard.backgroundValue,
+      isTemplate: false,
+      position,
+    }).returning();
+
+    // Add creator as board admin
+    await db.insert(boardMembers).values({
+      boardId: newBoard.id,
+      userId: request.userId!,
+      role: 'admin',
+    });
+
+    // Copy lists from template (without cards)
+    const templateLists = await db.select().from(lists)
+      .where(eq(lists.boardId, templateId))
+      .orderBy(asc(lists.position));
+
+    for (const tList of templateLists) {
+      await db.insert(lists).values({
+        boardId: newBoard.id,
+        name: tList.name,
+        position: tList.position,
+      });
+    }
+
+    // Copy labels from template
+    const templateLabels = await db.select().from(labels)
+      .where(eq(labels.boardId, templateId))
+      .orderBy(labels.position);
+
+    for (const tLabel of templateLabels) {
+      await db.insert(labels).values({
+        boardId: newBoard.id,
+        name: tLabel.name,
+        color: tLabel.color,
+        position: tLabel.position,
+      });
+    }
+
+    return reply.status(201).send({ board: newBoard });
+  });
+
+  // Get board with lists, cards, labels
   app.get('/boards/:boardId', {
     preHandler: [requireAuth, requireBoardRole('admin', 'normal', 'observer')],
   }, async (request) => {
@@ -79,7 +164,11 @@ export async function boardRoutes(app: FastifyInstance) {
 
     const boardLabels = await db.select().from(labels).where(eq(labels.boardId, boardId)).orderBy(labels.position);
 
-    return { board, labels: boardLabels };
+    const boardLists = await db.select().from(lists).where(eq(lists.boardId, boardId)).orderBy(asc(lists.position));
+
+    const boardCards = await db.select().from(cards).where(eq(cards.boardId, boardId)).orderBy(asc(cards.position));
+
+    return { board, labels: boardLabels, lists: boardLists, cards: boardCards };
   });
 
   // Update board
@@ -175,6 +264,102 @@ export async function boardRoutes(app: FastifyInstance) {
     );
     broadcast(app.io, boardId, WS_EVENTS.MEMBER_REMOVED, { boardId, userId });
     return reply.status(204).send();
+  });
+
+  // Upload board background image
+  app.post('/boards/:boardId/background', {
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
+    const { boardId } = request.params as { boardId: string };
+
+    const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
+    if (!board) throw new NotFoundError('Board');
+
+    // Check board membership - must be admin
+    const [member] = await db.select().from(boardMembers).where(
+      and(eq(boardMembers.boardId, boardId), eq(boardMembers.userId, request.userId!)),
+    );
+    if (!member || member.role !== 'admin') throw new ForbiddenError();
+
+    const file = await request.file();
+    if (!file) {
+      return reply.status(400).send({ error: { code: 'NO_FILE', message: 'No file uploaded' } });
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
+    if (!allowedTypes.includes(file.mimetype)) {
+      return reply.status(400).send({ error: { code: 'INVALID_TYPE', message: 'Only image files are allowed' } });
+    }
+
+    const sanitized = file.filename.replace(/[\\/]/g, '').replace(/\s+/g, '_');
+    const dir = path.join(config.STORAGE_PATH, 'backgrounds');
+    await fs.mkdir(dir, { recursive: true });
+
+    // Remove old background files for this board
+    try {
+      const existingFiles = await fs.readdir(dir);
+      for (const f of existingFiles) {
+        if (f.startsWith(`${boardId}-`)) {
+          await fs.unlink(path.join(dir, f)).catch(() => {});
+        }
+      }
+    } catch {
+      // Directory may not exist yet
+    }
+
+    const storageName = `${boardId}-${sanitized}`;
+    const storagePath = path.join(dir, storageName);
+
+    const buffer = await file.toBuffer();
+    await fs.writeFile(storagePath, buffer);
+
+    // Store the mime type alongside for serving
+    await fs.writeFile(storagePath + '.meta', file.mimetype);
+
+    const backgroundValue = `/api/v1/boards/${boardId}/background/image`;
+
+    const [updatedBoard] = await db
+      .update(boards)
+      .set({ backgroundType: 'image' as const, backgroundValue, updatedAt: new Date() })
+      .where(eq(boards.id, boardId))
+      .returning();
+
+    return reply.status(200).send({ board: updatedBoard });
+  });
+
+  // Serve board background image
+  app.get('/boards/:boardId/background/image', {
+    preHandler: [requireAuth, requireBoardRole('admin', 'normal', 'observer')],
+  }, async (request, reply) => {
+    const { boardId } = request.params as { boardId: string };
+
+    const dir = path.join(config.STORAGE_PATH, 'backgrounds');
+
+    // Find the background file for this board
+    let files: string[];
+    try {
+      files = await fs.readdir(dir);
+    } catch {
+      throw new NotFoundError('Background image');
+    }
+
+    const bgFile = files.find((f) => f.startsWith(`${boardId}-`) && !f.endsWith('.meta'));
+    if (!bgFile) {
+      throw new NotFoundError('Background image');
+    }
+
+    const filePath = path.join(dir, bgFile);
+    const fileBuffer = await fs.readFile(filePath);
+
+    // Read mime type from meta file
+    let mimeType = 'image/png';
+    try {
+      mimeType = (await fs.readFile(filePath + '.meta', 'utf-8')).trim();
+    } catch {
+      // default
+    }
+
+    return reply.type(mimeType).send(fileBuffer);
   });
 
   // Board labels CRUD

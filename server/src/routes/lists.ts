@@ -4,11 +4,12 @@ import { createListSchema, updateListSchema, moveAllCardsSchema } from '@mello/s
 import { db } from '../db/index.js';
 import { lists } from '../db/schema/lists.js';
 import { cards } from '../db/schema/cards.js';
-import { cardLabels } from '../db/schema/labels.js';
+import { labels, cardLabels } from '../db/schema/labels.js';
 import { cardAssignments } from '../db/schema/card-assignments.js';
+import { boardMembers } from '../db/schema/boards.js';
 import { requireAuth, requireBoardRole } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
-import { NotFoundError } from '../utils/errors.js';
+import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors.js';
 import { getNextPosition } from '../utils/position.js';
 import { broadcast } from '../utils/broadcast.js';
 import { WS_EVENTS } from '@mello/shared';
@@ -225,5 +226,109 @@ export async function listRoutes(app: FastifyInstance) {
     }
 
     return { moved: cardsToMove.length };
+  });
+
+  // Copy list to another board
+  app.post('/lists/:listId/copy', {
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
+    const { listId } = request.params as { listId: string };
+    const { targetBoardId } = request.body as { targetBoardId: string };
+
+    // Find source list
+    const [sourceList] = await db.select().from(lists).where(eq(lists.id, listId));
+    if (!sourceList) throw new NotFoundError('List');
+
+    const sourceBoardId = sourceList.boardId;
+
+    // Cannot copy to same board
+    if (sourceBoardId === targetBoardId) {
+      throw new ValidationError('Cannot copy list to the same board');
+    }
+
+    // Check user membership on source board (admin or normal)
+    const [sourceMember] = await db.select().from(boardMembers).where(
+      and(eq(boardMembers.boardId, sourceBoardId), eq(boardMembers.userId, request.userId!)),
+    );
+    if (!sourceMember || !['admin', 'normal'].includes(sourceMember.role)) {
+      throw new ForbiddenError();
+    }
+
+    // Check user membership on target board (admin or normal)
+    const [targetMember] = await db.select().from(boardMembers).where(
+      and(eq(boardMembers.boardId, targetBoardId), eq(boardMembers.userId, request.userId!)),
+    );
+    if (!targetMember || !['admin', 'normal'].includes(targetMember.role)) {
+      throw new ForbiddenError();
+    }
+
+    // Verify target board exists
+    const { boards } = await import('../db/schema/boards.js');
+    const [targetBoard] = await db.select().from(boards).where(eq(boards.id, targetBoardId));
+    if (!targetBoard) throw new NotFoundError('Target board');
+
+    // Get next position for the new list on target board
+    const existingLists = await db.select({ position: lists.position })
+      .from(lists)
+      .where(eq(lists.boardId, targetBoardId))
+      .orderBy(asc(lists.position));
+    const listPosition = getNextPosition(existingLists.at(-1)?.position);
+
+    // Create the new list
+    const [newList] = await db.insert(lists).values({
+      boardId: targetBoardId,
+      name: sourceList.name,
+      position: listPosition,
+    }).returning();
+
+    // Copy cards
+    const sourceCards = await db.select().from(cards)
+      .where(eq(cards.listId, listId))
+      .orderBy(asc(cards.position));
+
+    // Get labels on source and target boards for matching
+    const sourceLabels = await db.select().from(labels).where(eq(labels.boardId, sourceBoardId));
+    const targetLabels = await db.select().from(labels).where(eq(labels.boardId, targetBoardId));
+
+    // Build a map: sourceLabel key (color+name) -> targetLabel id
+    const labelMap = new Map<string, string>();
+    for (const tl of targetLabels) {
+      const key = `${tl.color}:${tl.name ?? ''}`;
+      labelMap.set(key, tl.id);
+    }
+
+    for (const sourceCard of sourceCards) {
+      const [newCard] = await db.insert(cards).values({
+        listId: newList.id,
+        boardId: targetBoardId,
+        name: sourceCard.name,
+        description: sourceCard.description,
+        position: sourceCard.position,
+      }).returning();
+
+      // Get card's labels from source
+      const cardLabelRows = await db.select().from(cardLabels)
+        .where(eq(cardLabels.cardId, sourceCard.id));
+
+      for (const cl of cardLabelRows) {
+        // Find the source label to get color+name
+        const srcLabel = sourceLabels.find((l) => l.id === cl.labelId);
+        if (!srcLabel) continue;
+
+        const key = `${srcLabel.color}:${srcLabel.name ?? ''}`;
+        const targetLabelId = labelMap.get(key);
+        if (targetLabelId) {
+          await db.insert(cardLabels).values({
+            cardId: newCard.id,
+            labelId: targetLabelId,
+          }).onConflictDoNothing();
+        }
+      }
+    }
+
+    return reply.status(201).send({
+      list: newList,
+      cardsCopied: sourceCards.length,
+    });
   });
 }

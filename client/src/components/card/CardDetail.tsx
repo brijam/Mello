@@ -1,11 +1,13 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../../api/client.js';
 import { useBoardStore } from '../../stores/boardStore.js';
+import { useAuthStore } from '../../stores/authStore.js';
 import MarkdownRenderer from './MarkdownRenderer.js';
 import LabelPicker from './LabelPicker.js';
 import LabelBadge from '../board/LabelBadge.js';
 import CardChecklist from './CardChecklist.js';
 import CardComments from './CardComments.js';
+import CardAttachments from './CardAttachments.js';
 
 interface CardDetailData {
   id: string;
@@ -51,7 +53,9 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
   // Label picker
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   const labelBtnRef = useRef<HTMLButtonElement>(null);
+  const attachmentFileInputRef = useRef<HTMLInputElement>(null);
 
+  const user = useAuthStore((s) => s.user);
   const lists = useBoardStore((s) => s.lists);
   const labels = useBoardStore((s) => s.labels);
   const deleteCardStore = useBoardStore((s) => s.deleteCard);
@@ -322,7 +326,12 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
             <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
               Attachments
             </h3>
-            <p className="text-sm text-gray-400">Coming soon</p>
+            <CardAttachments
+              cardId={card.id}
+              attachments={(card.attachments as any[]) ?? []}
+              onRefresh={fetchCard}
+              currentUserId={user?.id}
+            />
           </section>
 
           <section className="mb-6">
@@ -386,9 +395,34 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
             >
               Checklist
             </button>
-            <button className="text-left text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded">
+            <button
+              onClick={() => attachmentFileInputRef.current?.click()}
+              className="text-left text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded"
+            >
               Attachment
             </button>
+            <input
+              ref={attachmentFileInputRef}
+              type="file"
+              className="hidden"
+              onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                const formData = new FormData();
+                formData.append('file', file);
+                try {
+                  await fetch(`/api/v1/cards/${card.id}/attachments`, {
+                    method: 'POST',
+                    credentials: 'include',
+                    body: formData,
+                  });
+                  await fetchCard();
+                } catch {
+                  // ignore
+                }
+                e.target.value = '';
+              }}
+            />
             <hr className="my-2 border-gray-200" />
             <button
               onClick={handleDelete}

@@ -4,6 +4,10 @@ import { useAuthStore } from '../stores/authStore.js';
 import { api } from '../api/client.js';
 import type { Board, Workspace } from '@mello/shared';
 import FontSizeSelector from '../components/common/FontSizeSelector.js';
+import SearchBar from '../components/search/SearchBar.js';
+import NotificationBell from '../components/notifications/NotificationBell.js';
+import KeyboardShortcutsHelp from '../components/common/KeyboardShortcutsHelp.js';
+import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts.js';
 
 export default function WorkspacePage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -13,6 +17,9 @@ export default function WorkspacePage() {
   const [boards, setBoards] = useState<Board[]>([]);
   const [newBoardName, setNewBoardName] = useState('');
   const [showCreate, setShowCreate] = useState(false);
+  const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+
+  useKeyboardShortcuts({ onShowHelp: () => setShowShortcutsHelp(true) });
 
   useEffect(() => {
     if (!workspaceId) return;
@@ -46,8 +53,10 @@ export default function WorkspacePage() {
     <div className="min-h-screen bg-gray-100">
       <header className="bg-mello-blue-dark text-white px-6 py-3 flex items-center justify-between">
         <h1 className="text-xl font-bold">Mello</h1>
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-3">
+          <SearchBar />
           <FontSizeSelector />
+          <NotificationBell />
           <span className="text-sm">{user?.displayName}</span>
           <button onClick={handleLogout} className="text-sm hover:underline opacity-80">
             Logout
@@ -98,6 +107,8 @@ export default function WorkspacePage() {
           )}
         </div>
       </main>
+
+      <KeyboardShortcutsHelp isOpen={showShortcutsHelp} onClose={() => setShowShortcutsHelp(false)} />
     </div>
   );
 }
