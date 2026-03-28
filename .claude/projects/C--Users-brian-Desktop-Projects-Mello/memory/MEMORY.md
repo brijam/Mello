@@ -2,3 +2,4 @@
 - [Trello Export Strategy](project_trello_export.md) — Plan to use trello-full-backup + custom import script
 - [No External Network](feedback_no_external_network.md) — Runtime must never make outbound network requests; all assets bundled locally
 - [Brian - user profile](user_brian.md) — 59 years old, needs larger font sizes and display controls
+- [TDD process](feedback_tdd.md) — Wants extremely thorough TDD: spec first, failing tests, then code. High coverage, edge cases, no shortcuts
