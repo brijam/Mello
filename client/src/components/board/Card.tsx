@@ -92,13 +92,13 @@ export default function Card({ card, listId }: CardProps) {
             }}
             onPointerDown={(e) => e.stopPropagation()}
             onPointerUp={(e) => e.stopPropagation()}
-            className="text-gray-300 hover:text-gray-500 text-xs opacity-0 group-hover:opacity-100 transition-opacity ml-2"
+            className="text-gray-300 hover:text-gray-500 text-sm opacity-0 group-hover:opacity-100 transition-opacity ml-2"
           >
             &times;
           </button>
         </div>
         {card.description && (
-          <div className="mt-1 text-xs text-gray-400">
+          <div className="mt-1 text-sm text-gray-400">
             &#x1F4DD;
           </div>
         )}

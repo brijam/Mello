@@ -202,6 +202,32 @@ export async function searchRoutes(app: FastifyInstance) {
       ORDER BY c.id, ts_rank(to_tsvector('english', ci.name), websearch_to_tsquery('english', ${q})) DESC
     `;
 
+    // Checklist title matches query
+    const checklistTitleMatchesQuery = sql`
+      SELECT DISTINCT ON (c.id)
+        c.id AS card_id,
+        c.name AS card_name,
+        l.id AS list_id,
+        l.name AS list_name,
+        b.id AS board_id,
+        b.name AS board_name,
+        b.workspace_id,
+        'checklist'::text AS match_source,
+        ts_headline('english', cl.name, websearch_to_tsquery('english', ${q}), 'MaxWords=35, MinWords=15, MaxFragments=1, StartSel=<mark>, StopSel=</mark>') AS snippet,
+        ts_rank(to_tsvector('english', cl.name), websearch_to_tsquery('english', ${q})) AS rank
+      FROM checklists cl
+      JOIN cards c ON c.id = cl.card_id
+      JOIN lists l ON l.id = c.list_id
+      JOIN boards b ON b.id = c.board_id
+      JOIN board_members bm ON bm.board_id = b.id AND bm.user_id = ${userId}
+      WHERE to_tsvector('english', cl.name) @@ websearch_to_tsquery('english', ${q})
+      ${wsFilter}
+      ${boardFilter}
+      ${labelFilter}
+      ${memberFilter}
+      ORDER BY c.id, ts_rank(to_tsvector('english', cl.name), websearch_to_tsquery('english', ${q})) DESC
+    `;
+
     // Attachment filename matches query
     const attachmentMatchesQuery = sql`
       SELECT DISTINCT ON (c.id)
@@ -238,6 +264,7 @@ export async function searchRoutes(app: FastifyInstance) {
       WITH card_matches AS (${cardMatchesQuery}),
       comment_matches AS (${commentMatchesQuery}),
       checklist_matches AS (${checklistMatchesQuery}),
+      checklist_title_matches AS (${checklistTitleMatchesQuery}),
       attachment_matches AS (${attachmentMatchesQuery}),
       combined AS (
         SELECT * FROM card_matches
@@ -249,10 +276,16 @@ export async function searchRoutes(app: FastifyInstance) {
         WHERE checklist_matches.card_id NOT IN (SELECT card_id FROM card_matches)
           AND checklist_matches.card_id NOT IN (SELECT card_id FROM comment_matches)
         UNION ALL
+        SELECT * FROM checklist_title_matches
+        WHERE checklist_title_matches.card_id NOT IN (SELECT card_id FROM card_matches)
+          AND checklist_title_matches.card_id NOT IN (SELECT card_id FROM comment_matches)
+          AND checklist_title_matches.card_id NOT IN (SELECT card_id FROM checklist_matches)
+        UNION ALL
         SELECT * FROM attachment_matches
         WHERE attachment_matches.card_id NOT IN (SELECT card_id FROM card_matches)
           AND attachment_matches.card_id NOT IN (SELECT card_id FROM comment_matches)
           AND attachment_matches.card_id NOT IN (SELECT card_id FROM checklist_matches)
+          AND attachment_matches.card_id NOT IN (SELECT card_id FROM checklist_title_matches)
       )
       SELECT r.*
       FROM combined r

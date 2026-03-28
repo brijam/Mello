@@ -60,6 +60,19 @@ app.setErrorHandler((error, _request, reply) => {
   });
 });
 
+// Accept empty application/json bodies gracefully
+app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+  if (!body || (typeof body === 'string' && body.trim() === '')) {
+    done(null, undefined);
+  } else {
+    try {
+      done(null, JSON.parse(body as string));
+    } catch (err) {
+      done(err as Error, undefined);
+    }
+  }
+});
+
 // Routes
 await app.register(authRoutes, { prefix: '/api/v1/auth' });
 await app.register(workspaceRoutes, { prefix: '/api/v1/workspaces' });

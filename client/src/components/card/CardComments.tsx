@@ -45,7 +45,7 @@ function UserAvatar({ user }: { user: CommentUser }) {
 
   return (
     <div className={`w-8 h-8 rounded-full ${color} flex items-center justify-center flex-shrink-0`}>
-      <span className="text-white text-xs font-semibold">{initials}</span>
+      <span className="text-white text-sm font-semibold">{initials}</span>
     </div>
   );
 }
@@ -125,13 +125,18 @@ export default function CardComments({ cardId }: CardCommentsProps) {
             if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSubmit();
           }}
         />
-        <button
-          onClick={handleSubmit}
-          disabled={!newBody.trim() || submitting}
-          className="mt-1.5 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm px-4 py-1.5 rounded"
-        >
-          {submitting ? 'Saving...' : 'Save'}
-        </button>
+        <div className="flex items-center gap-3 mt-1.5">
+          <button
+            onClick={handleSubmit}
+            disabled={!newBody.trim() || submitting}
+            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm px-4 py-1.5 rounded"
+          >
+            {submitting ? 'Saving...' : 'Save'}
+          </button>
+          <span className="text-sm text-gray-400">
+            Tip: @mention other board members to notify them
+          </span>
+        </div>
       </div>
 
       {/* Comments list */}
@@ -153,7 +158,7 @@ export default function CardComments({ cardId }: CardCommentsProps) {
                     <span className="text-sm font-semibold text-gray-700">
                       {comment.user.displayName || comment.user.username}
                     </span>
-                    <span className="text-xs text-gray-400">
+                    <span className="text-sm text-gray-400">
                       {timeAgo(comment.createdAt)}
                       {comment.editedAt && ' (edited)'}
                     </span>
@@ -174,13 +179,13 @@ export default function CardComments({ cardId }: CardCommentsProps) {
                       <div className="flex gap-2 mt-1">
                         <button
                           onClick={() => handleEdit(comment.id)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white text-xs px-3 py-1 rounded"
+                          className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1 rounded"
                         >
                           Save
                         </button>
                         <button
                           onClick={() => setEditingId(null)}
-                          className="text-xs text-gray-500 hover:text-gray-700 px-2 py-1"
+                          className="text-sm text-gray-500 hover:text-gray-700 px-2 py-1"
                         >
                           Cancel
                         </button>
@@ -198,13 +203,13 @@ export default function CardComments({ cardId }: CardCommentsProps) {
                               setEditingId(comment.id);
                               setEditBody(comment.body);
                             }}
-                            className="text-xs text-gray-400 hover:text-blue-600 underline"
+                            className="text-sm text-gray-400 hover:text-blue-600 underline"
                           >
                             Edit
                           </button>
                           <button
                             onClick={() => handleDelete(comment.id)}
-                            className="text-xs text-gray-400 hover:text-red-600 underline"
+                            className="text-sm text-gray-400 hover:text-red-600 underline"
                           >
                             Delete
                           </button>

@@ -810,4 +810,70 @@ describe('GET /api/v1/search', () => {
       expect(match.matchSource).toBe('attachment');
     });
   });
+
+  // ── Bug 3: Search should match checklist TITLE, not just checklist items ────
+
+  describe('Search matches checklist title (Bug 3)', () => {
+    it('search matches card by checklist TITLE (not just items)', async () => {
+      const testUser = await createTestUser(app);
+
+      const boardRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: '/api/v1/boards',
+        payload: { workspaceId: testUser.workspace.id, name: 'Checklist Title Board' },
+      });
+      const board = boardRes.json().board;
+
+      const listRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: `/api/v1/boards/${board.id}/lists`,
+        payload: { name: 'List' },
+      });
+      const list = listRes.json().list;
+
+      const cardRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: `/api/v1/lists/${list.id}/cards`,
+        payload: { name: 'Unrelated card name' },
+      });
+      const card = cardRes.json().card;
+
+      // Create a checklist with a unique name that does NOT appear in the card
+      // name, description, comments, or checklist items — only in the checklist title.
+      const checklistRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: `/api/v1/cards/${card.id}/checklists`,
+        payload: { name: 'Design Review' },
+      });
+      const checklist = checklistRes.json().checklist;
+
+      // Add items that do NOT contain "Design Review" so we can be sure
+      // the match comes from the checklist title, not an item.
+      await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: `/api/v1/checklists/${checklist.id}/items`,
+        payload: { name: 'Check responsiveness' },
+      });
+      await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: `/api/v1/checklists/${checklist.id}/items`,
+        payload: { name: 'Verify color scheme' },
+      });
+
+      // Search for the checklist title
+      const searchRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'GET',
+        url: '/api/v1/search?q=Design+Review',
+      });
+
+      expect(searchRes.statusCode).toBe(200);
+      const body = searchRes.json();
+      expect(body.results.length).toBeGreaterThanOrEqual(1);
+      const match = body.results.find(
+        (r: any) => r.cardName === 'Unrelated card name',
+      );
+      expect(match).toBeDefined();
+      expect(match.matchSource).toBe('checklist');
+    });
+  });
 });

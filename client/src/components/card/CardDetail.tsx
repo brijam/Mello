@@ -252,7 +252,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
                     setDescValue(card.description ?? '');
                     setEditingDesc(true);
                   }}
-                  className="text-xs bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded"
+                  className="text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-1 rounded"
                 >
                   Edit
                 </button>
@@ -349,8 +349,8 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
         </div>
 
         {/* Sidebar */}
-        <div className="w-48 flex-shrink-0">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-3">
+        <div className="w-[12rem] flex-shrink-0">
+          <h3 className="text-sm font-semibold text-gray-500 uppercase tracking-wide mb-3">
             Actions
           </h3>
           <div className="flex flex-col gap-2">

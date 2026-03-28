@@ -934,3 +934,67 @@ describe('Notification trigger completeness (Bug 6)', () => {
     expect(notif.data.actorDisplayName).toBe('Actor User');
   });
 });
+
+// ── Bug 6: Self-mention should NOT create a notification ────────────────────
+
+describe('Self-mention in comment (Bug 6)', () => {
+  // Self-notifications are intentionally skipped: when a user @mentions their
+  // own username in a comment they write, the system should NOT create a
+  // notification for them. This prevents users from being notified about their
+  // own actions, which would be noise rather than useful information.
+
+  it('self-mention (@ownusername in own comment) creates NO notification', async () => {
+    const selfMentioner = await createTestUser(app, {
+      username: 'selfmentioner',
+      email: 'selfmentioner@example.com',
+      displayName: 'Self Mentioner',
+    });
+
+    // Create a board, list, and card
+    const boardRes = await injectWithAuth(app, selfMentioner.cookies, {
+      method: 'POST',
+      url: '/api/v1/boards',
+      payload: { workspaceId: selfMentioner.workspace.id, name: 'Self Mention Board' },
+    });
+    const board = boardRes.json().board;
+
+    const listRes = await injectWithAuth(app, selfMentioner.cookies, {
+      method: 'POST',
+      url: `/api/v1/boards/${board.id}/lists`,
+      payload: { name: 'List' },
+    });
+    const list = listRes.json().list;
+
+    const cardRes = await injectWithAuth(app, selfMentioner.cookies, {
+      method: 'POST',
+      url: `/api/v1/lists/${list.id}/cards`,
+      payload: { name: 'Self Mention Card' },
+    });
+    const card = cardRes.json().card;
+
+    // Clear any notifications that may have been created during setup
+    const { db: dbInstance } = await import('../db/index.js');
+    const { sql: sqlTag } = await import('drizzle-orm');
+    await dbInstance.execute(
+      sqlTag`DELETE FROM notifications WHERE user_id = ${selfMentioner.user.id}`,
+    );
+
+    // Post a comment that @mentions the user's own username
+    await injectWithAuth(app, selfMentioner.cookies, {
+      method: 'POST',
+      url: `/api/v1/cards/${card.id}/comments`,
+      payload: { body: 'Note to @selfmentioner: remember to follow up on this' },
+    });
+
+    // Verify NO notification was created for the self-mention
+    const res = await injectWithAuth(app, selfMentioner.cookies, {
+      method: 'GET',
+      url: '/api/v1/notifications',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.notifications).toHaveLength(0);
+    expect(body.unreadCount).toBe(0);
+  });
+});

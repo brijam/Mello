@@ -99,7 +99,7 @@ export default function FilterBar({
           className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors flex-shrink-0"
           title="Click to remove filter"
         >
-          <div className="w-5 h-5 rounded-full bg-gray-400 flex items-center justify-center text-white text-[10px] font-bold">
+          <div className="w-5 h-5 rounded-full bg-gray-400 flex items-center justify-center text-white text-sm font-bold">
             {member.displayName.charAt(0).toUpperCase()}
           </div>
           <span className="text-sm font-medium text-gray-700">{member.displayName}</span>

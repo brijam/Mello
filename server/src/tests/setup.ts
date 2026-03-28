@@ -33,6 +33,19 @@ export async function buildApp(): Promise<FastifyInstance> {
   const noopRoom = { emit: () => {} };
   app.decorate('io', { to: () => noopRoom } as any);
 
+  // Accept empty application/json bodies gracefully
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (req, body, done) => {
+    if (!body || (typeof body === 'string' && body.trim() === '')) {
+      done(null, undefined);
+    } else {
+      try {
+        done(null, JSON.parse(body as string));
+      } catch (err) {
+        done(err as Error, undefined);
+      }
+    }
+  });
+
   app.setErrorHandler((error, _request, reply) => {
     if (error instanceof AppError) {
       return reply.status(error.statusCode).send({

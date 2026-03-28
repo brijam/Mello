@@ -63,7 +63,7 @@ export default function SearchBar() {
           onFocus={handleFocus}
           onKeyDown={handleKeyDown}
           placeholder="Search cards... (Ctrl+K)"
-          className="bg-white/20 text-white placeholder-white/60 rounded px-3 py-1.5 text-base w-48 focus:w-72 focus:bg-white/30 transition-all duration-200 outline-none focus:ring-2 focus:ring-white/40"
+          className="bg-white/20 text-white placeholder-white/60 rounded px-3 py-1.5 text-base w-[12rem] focus:w-[18rem] focus:bg-white/30 transition-all duration-200 outline-none focus:ring-2 focus:ring-white/40"
         />
       </div>
 
@@ -91,7 +91,7 @@ export default function SearchBar() {
                   className="w-full text-lg px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                 />
                 <p className="text-sm text-gray-500 mt-2">
-                  Press <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-xs font-mono">Esc</kbd> to close
+                  Press <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-sm font-mono">Esc</kbd> to close
                 </p>
               </div>
 
@@ -135,7 +135,7 @@ export default function SearchBar() {
                               dangerouslySetInnerHTML={{ __html: result.snippet }}
                             />
                           )}
-                          <span className="text-xs text-gray-400 mt-1 inline-block">
+                          <span className="text-sm text-gray-400 mt-1 inline-block">
                             Match in {result.matchSource}
                           </span>
                         </button>

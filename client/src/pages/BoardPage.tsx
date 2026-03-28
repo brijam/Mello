@@ -66,6 +66,12 @@ export default function BoardPage() {
     }),
   );
 
+  // Clear board data only when leaving the page (boardId changes or unmount)
+  useEffect(() => {
+    return () => clear();
+  }, [boardId, clear]);
+
+  // Fetch/refetch board whenever filters change
   useEffect(() => {
     if (boardId) {
       const filters: { labels?: string[]; members?: string[] } = {};
@@ -73,8 +79,7 @@ export default function BoardPage() {
       if (activeMembers.length) filters.members = activeMembers;
       fetchBoard(boardId, Object.keys(filters).length ? filters : undefined);
     }
-    return () => clear();
-  }, [boardId, fetchBoard, clear, activeLabels.join(','), activeMembers.join(',')]);
+  }, [boardId, fetchBoard, activeLabels.join(','), activeMembers.join(',')]);
 
   // Filter toggle handlers
   const handleToggleLabel = useCallback(
@@ -303,16 +308,16 @@ export default function BoardPage() {
   return (
     <div className="min-h-screen flex flex-col" style={bgStyle}>
       <header className="bg-black/30 text-white px-4 py-2 flex items-center justify-between backdrop-blur-sm">
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-4 min-w-0">
           <button
             onClick={() => navigate(`/w/${board.workspaceId}`)}
-            className="text-sm hover:underline opacity-80"
+            className="text-sm hover:underline opacity-80 whitespace-nowrap"
           >
             &larr; Boards
           </button>
-          <h1 className="text-lg font-bold">{board.name}</h1>
+          <h1 className="text-lg font-bold truncate">{board.name}</h1>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-3 flex-shrink-0">
           <SearchBar />
           <FontSizeSelector />
           <NotificationBell />
@@ -355,14 +360,14 @@ export default function BoardPage() {
 
           <DragOverlay dropAnimation={null}>
             {activeType === 'card' && activeCard ? (
-              <div className="bg-white rounded-lg shadow-lg px-3 py-2 w-72 rotate-2">
+              <div className="bg-white rounded-lg shadow-lg px-3 py-2 w-[18rem] rotate-2">
                 <span className="text-sm text-gray-800">{activeCard.name}</span>
               </div>
             ) : null}
             {activeType === 'list' && activeList ? (
-              <div className="bg-gray-200 rounded-xl w-72 px-3 py-2 shadow-lg rotate-2 opacity-90">
+              <div className="bg-gray-200 rounded-xl w-[18rem] px-3 py-2 shadow-lg rotate-2 opacity-90">
                 <h3 className="font-semibold text-sm text-gray-800">{activeList.name}</h3>
-                <div className="text-xs text-gray-500 mt-1">
+                <div className="text-sm text-gray-500 mt-1">
                   {activeList.cards.length} card{activeList.cards.length !== 1 ? 's' : ''}
                 </div>
               </div>

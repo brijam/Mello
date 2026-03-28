@@ -21,7 +21,7 @@ export default function AddList({ boardId }: AddListProps) {
     return (
       <button
         onClick={() => setIsAdding(true)}
-        className="w-72 flex-shrink-0 bg-white/30 hover:bg-white/50 text-white rounded-xl px-3 py-2 text-sm text-left transition-colors"
+        className="w-[18rem] flex-shrink-0 bg-white/30 hover:bg-white/50 text-white rounded-xl px-3 py-2 text-sm text-left transition-colors"
       >
         + Add another list
       </button>
@@ -29,7 +29,7 @@ export default function AddList({ boardId }: AddListProps) {
   }
 
   return (
-    <div className="w-72 flex-shrink-0 bg-gray-200 rounded-xl p-2">
+    <div className="w-[18rem] flex-shrink-0 bg-gray-200 rounded-xl p-2">
       <form onSubmit={handleSubmit}>
         <input
           autoFocus
