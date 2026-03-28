@@ -1,6 +1,7 @@
 import Fastify, { type FastifyInstance } from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
+import multipart from '@fastify/multipart';
 import authPlugin from '../plugins/auth.js';
 import { AppError } from '../utils/errors.js';
 
@@ -11,6 +12,9 @@ import { listRoutes } from '../routes/lists.js';
 import { cardRoutes } from '../routes/cards.js';
 import { checklistRoutes } from '../routes/checklists.js';
 import { commentRoutes } from '../routes/comments.js';
+import { attachmentRoutes } from '../routes/attachments.js';
+import { searchRoutes } from '../routes/search.js';
+import { notificationRoutes } from '../routes/notifications.js';
 
 import { db } from '../db/index.js';
 import { sql } from 'drizzle-orm';
@@ -22,6 +26,7 @@ export async function buildApp(): Promise<FastifyInstance> {
 
   await app.register(cors, { origin: true, credentials: true });
   await app.register(cookie);
+  await app.register(multipart, { limits: { fileSize: 26_214_400 } }); // 25MB
   await app.register(authPlugin);
 
   // Stub Socket.IO for tests — routes call app.io.to(...).emit(...)
@@ -32,6 +37,12 @@ export async function buildApp(): Promise<FastifyInstance> {
     if (error instanceof AppError) {
       return reply.status(error.statusCode).send({
         error: { code: error.code, message: error.message },
+      });
+    }
+    // Handle Fastify/plugin errors with statusCode (e.g., multipart file size limit)
+    if (error.statusCode && error.statusCode !== 500) {
+      return reply.status(error.statusCode).send({
+        error: { code: error.code ?? 'ERROR', message: error.message },
       });
     }
     return reply.status(500).send({
@@ -46,6 +57,9 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(cardRoutes, { prefix: '/api/v1' });
   await app.register(checklistRoutes, { prefix: '/api/v1' });
   await app.register(commentRoutes, { prefix: '/api/v1' });
+  await app.register(attachmentRoutes, { prefix: '/api/v1' });
+  await app.register(searchRoutes, { prefix: '/api/v1' });
+  await app.register(notificationRoutes, { prefix: '/api/v1' });
 
   app.get('/api/health', async () => ({ status: 'ok' }));
 

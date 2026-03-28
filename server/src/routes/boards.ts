@@ -12,6 +12,7 @@ import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { getNextPosition } from '../utils/position.js';
 import { LABEL_COLORS, WS_EVENTS } from '@mello/shared';
 import { broadcast } from '../utils/broadcast.js';
+import { createNotification } from '../utils/notifications.js';
 
 export async function boardRoutes(app: FastifyInstance) {
   // Create board
@@ -145,6 +146,20 @@ export async function boardRoutes(app: FastifyInstance) {
       target: [boardMembers.boardId, boardMembers.userId],
       set: { role },
     });
+
+    // Create notification if adding someone else
+    if (userId !== request.userId!) {
+      const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
+      const [actor] = await db.select().from(users).where(eq(users.id, request.userId!));
+      if (board && actor) {
+        await createNotification(userId, 'board_added', {
+          boardId: board.id,
+          boardName: board.name,
+          actorId: actor.id,
+          actorDisplayName: actor.displayName,
+        });
+      }
+    }
 
     broadcast(app.io, boardId, WS_EVENTS.MEMBER_ADDED, { boardId, userId, role });
     return reply.status(201).send({ ok: true });

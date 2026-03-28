@@ -1,12 +1,15 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, desc } from 'drizzle-orm';
+import { eq, desc, and } from 'drizzle-orm';
 import { createCommentSchema, updateCommentSchema } from '@mello/shared';
 import { db } from '../db/index.js';
 import { comments } from '../db/schema/comments.js';
+import { cards } from '../db/schema/cards.js';
+import { boards, boardMembers } from '../db/schema/boards.js';
 import { users } from '../db/schema/users.js';
 import { requireAuth } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
+import { createNotification, parseMentions } from '../utils/notifications.js';
 
 export async function commentRoutes(app: FastifyInstance) {
   // List comments for a card
@@ -60,6 +63,42 @@ export async function commentRoutes(app: FastifyInstance) {
       })
       .from(users)
       .where(eq(users.id, request.userId!));
+
+    // Process @mentions for notifications
+    const mentionedUsernames = parseMentions(body);
+    if (mentionedUsernames.length > 0) {
+      // Look up the card to get board info
+      const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
+      if (card) {
+        const [board] = await db.select().from(boards).where(eq(boards.id, card.boardId));
+        for (const username of mentionedUsernames) {
+          // Look up the mentioned user
+          const [mentionedUser] = await db.select().from(users).where(eq(users.username, username));
+          if (!mentionedUser) continue;
+          // Skip self-mention
+          if (mentionedUser.id === request.userId!) continue;
+          // Verify they're on the board
+          const [membership] = await db.select().from(boardMembers).where(
+            and(
+              eq(boardMembers.boardId, card.boardId),
+              eq(boardMembers.userId, mentionedUser.id),
+            ),
+          );
+          if (!membership) continue;
+          // Create notification
+          await createNotification(mentionedUser.id, 'mention', {
+            cardId: card.id,
+            cardName: card.name,
+            boardId: card.boardId,
+            boardName: board?.name,
+            actorId: request.userId!,
+            actorDisplayName: user?.displayName,
+            commentId: comment.id,
+            commentSnippet: body.slice(0, 100),
+          });
+        }
+      }
+    }
 
     return reply.status(201).send({
       comment: {

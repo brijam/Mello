@@ -5,3 +5,5 @@ export * from './list.js';
 export * from './card.js';
 export * from './checklist.js';
 export * from './comment.js';
+export * from './search.js';
+export * from './notification.js';

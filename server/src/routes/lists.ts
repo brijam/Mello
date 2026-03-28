@@ -1,10 +1,11 @@
 import type { FastifyInstance } from 'fastify';
-import { eq, and, asc, inArray } from 'drizzle-orm';
+import { eq, and, asc, inArray, sql } from 'drizzle-orm';
 import { createListSchema, updateListSchema, moveAllCardsSchema } from '@mello/shared';
 import { db } from '../db/index.js';
 import { lists } from '../db/schema/lists.js';
 import { cards } from '../db/schema/cards.js';
 import { cardLabels } from '../db/schema/labels.js';
+import { cardAssignments } from '../db/schema/card-assignments.js';
 import { requireAuth, requireBoardRole } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { NotFoundError } from '../utils/errors.js';
@@ -16,8 +17,36 @@ export async function listRoutes(app: FastifyInstance) {
   // Get lists with cards for a board
   app.get('/boards/:boardId/lists', {
     preHandler: [requireAuth, requireBoardRole('admin', 'normal', 'observer')],
-  }, async (request) => {
+  }, async (request, reply) => {
     const { boardId } = request.params as { boardId: string };
+    const query = request.query as { labels?: string; members?: string };
+
+    // UUID validation regex
+    const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+    // Parse and validate label filter
+    let labelFilter: string[] | null = null;
+    if (query.labels !== undefined && query.labels !== '') {
+      const raw = query.labels.split(',');
+      for (const id of raw) {
+        if (!uuidRegex.test(id)) {
+          return reply.status(400).send({ error: 'Invalid UUID in labels parameter' });
+        }
+      }
+      labelFilter = [...new Set(raw)];
+    }
+
+    // Parse and validate member filter
+    let memberFilter: string[] | null = null;
+    if (query.members !== undefined && query.members !== '') {
+      const raw = query.members.split(',');
+      for (const id of raw) {
+        if (!uuidRegex.test(id)) {
+          return reply.status(400).send({ error: 'Invalid UUID in members parameter' });
+        }
+      }
+      memberFilter = [...new Set(raw)];
+    }
 
     const boardLists = await db
       .select()
@@ -25,13 +54,50 @@ export async function listRoutes(app: FastifyInstance) {
       .where(eq(lists.boardId, boardId))
       .orderBy(asc(lists.position));
 
-    const boardCards = await db
+    let boardCards = await db
       .select()
       .from(cards)
       .where(eq(cards.boardId, boardId))
       .orderBy(asc(cards.position));
 
-    // Fetch card-label associations for all cards on this board
+    // Apply label filter: only cards that have ALL specified labels
+    if (labelFilter !== null && labelFilter.length > 0) {
+      const cardIds = boardCards.map((c) => c.id);
+      if (cardIds.length > 0) {
+        const matchingRows = await db
+          .select({ cardId: cardLabels.cardId })
+          .from(cardLabels)
+          .where(and(
+            inArray(cardLabels.cardId, cardIds),
+            inArray(cardLabels.labelId, labelFilter),
+          ))
+          .groupBy(cardLabels.cardId)
+          .having(sql`count(distinct ${cardLabels.labelId}) = ${labelFilter.length}`);
+
+        const matchingCardIds = new Set(matchingRows.map((r) => r.cardId));
+        boardCards = boardCards.filter((c) => matchingCardIds.has(c.id));
+      }
+    }
+
+    // Apply member filter: cards assigned to at least ONE specified member
+    if (memberFilter !== null && memberFilter.length > 0) {
+      const cardIds = boardCards.map((c) => c.id);
+      if (cardIds.length > 0) {
+        const matchingRows = await db
+          .select({ cardId: cardAssignments.cardId })
+          .from(cardAssignments)
+          .where(and(
+            inArray(cardAssignments.cardId, cardIds),
+            inArray(cardAssignments.userId, memberFilter),
+          ))
+          .groupBy(cardAssignments.cardId);
+
+        const matchingCardIds = new Set(matchingRows.map((r) => r.cardId));
+        boardCards = boardCards.filter((c) => matchingCardIds.has(c.id));
+      }
+    }
+
+    // Fetch card-label associations for remaining cards
     const cardIds = boardCards.map((c) => c.id);
     let cardLabelRows: { cardId: string; labelId: string }[] = [];
     if (cardIds.length > 0) {

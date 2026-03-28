@@ -41,12 +41,23 @@ async function setupTwoUsersWithBoard(appInstance: FastifyInstance) {
   });
   const board = boardRes.json().board;
 
-  // Add recipient as a board member
+  // Add recipient as a board member (this creates a board_added notification)
   await injectWithAuth(appInstance, actor.cookies, {
     method: 'POST',
     url: `/api/v1/boards/${board.id}/members`,
     payload: { userId: recipient.user.id, role: 'normal' },
   });
+
+  // Clear any setup-generated notifications so tests start clean
+  await injectWithAuth(appInstance, recipient.cookies, {
+    method: 'POST',
+    url: '/api/v1/notifications/mark-all-read',
+  });
+  // Actually delete them by truncating — mark-read isn't enough for count tests
+  // Use a direct DB call instead
+  const { db } = await import('../db/index.js');
+  const { sql } = await import('drizzle-orm');
+  await db.execute(sql`DELETE FROM notifications WHERE user_id = ${recipient.user.id}`);
 
   // Create a list and card
   const listRes = await injectWithAuth(appInstance, actor.cookies, {
@@ -430,6 +441,11 @@ describe('Notification trigger: @mention in comment', () => {
       url: `/api/v1/boards/${board.id}/members`,
       payload: { userId: thirdUser.user.id, role: 'normal' },
     });
+
+    // Clear the board_added notification for thirdUser
+    const { db: dbInstance } = await import('../db/index.js');
+    const { sql: sqlTag } = await import('drizzle-orm');
+    await dbInstance.execute(sqlTag`DELETE FROM notifications WHERE user_id = ${thirdUser.user.id}`);
 
     await injectWithAuth(app, actor.cookies, {
       method: 'POST',

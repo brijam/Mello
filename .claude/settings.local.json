@@ -43,7 +43,17 @@
       "Bash(pkill -f \"vite\")",
       "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npm test --workspace=server)",
       "Bash(cmd.exe /c \"netstat -ano | findstr :3000 | findstr LISTENING\" 2>&1)",
-      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/search.test.ts src/tests/filters.test.ts)"
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/search.test.ts src/tests/filters.test.ts)",
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/filters.test.ts src/tests/lists-cards.test.ts)",
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/attachments.test.ts)",
+      "Bash(PGPASSWORD='changeme' \"/c/Program Files/PostgreSQL/18/bin/psql.exe\" -U mello -h localhost -d mello -f \"C:/Users/brian/Desktop/Projects/Mello/server/src/db/migrations/0001_search_vectors.sql\")",
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/search.test.ts src/tests/notifications.test.ts)",
+      "Bash(PGPASSWORD='changeme' \"/c/Program Files/PostgreSQL/18/bin/psql.exe\" -U mello -h localhost -d mello -c \"SELECT c.id, c.name, ts_rank\\(c.search_vector, websearch_to_tsquery\\(''english'', ''design''\\)\\) as rank FROM cards c WHERE c.search_vector @@ websearch_to_tsquery\\(''english'', ''design''\\) ORDER BY rank DESC, id DESC\")",
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/search.test.ts -t \"passing cursor\")",
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" node -e \":*)",
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx tsx -e \":*)",
+      "Read(//tmp/**)",
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/search.test.ts -t \"cursor\")"
     ]
   }
 }
