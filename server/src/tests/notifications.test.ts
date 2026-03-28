@@ -797,3 +797,140 @@ describe('Notification pagination', () => {
     expect(body.unreadCount).toBe(5);
   });
 });
+
+// ── Bug 6: Notification data completeness and triggers ───────────────────────
+
+describe('Notification trigger completeness (Bug 6)', () => {
+  it('card_assigned notification includes all required data fields', async () => {
+    const { actor, recipient, card, board } = await setupTwoUsersWithBoard(app);
+
+    // Assign recipient to card
+    await injectWithAuth(app, actor.cookies, {
+      method: 'POST',
+      url: `/api/v1/cards/${card.id}/members/${recipient.user.id}`,
+    });
+
+    const res = await injectWithAuth(app, recipient.cookies, {
+      method: 'GET',
+      url: '/api/v1/notifications',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.notifications).toHaveLength(1);
+    const notif = body.notifications[0];
+    expect(notif.type).toBe('card_assigned');
+
+    // Verify ALL required data fields are present
+    expect(notif.data.cardId).toBe(card.id);
+    expect(notif.data.cardName).toBe('Test Card');
+    expect(notif.data.boardId).toBe(board.id);
+    expect(notif.data.boardName).toBe('Test Board');
+    expect(notif.data.actorId).toBe(actor.user.id);
+    expect(notif.data.actorDisplayName).toBe('Actor User');
+  });
+
+  it('board_added notification includes all required data fields', async () => {
+    const owner = await createTestUser(app, {
+      username: 'notifowner',
+      email: 'notifowner@example.com',
+      displayName: 'Notif Owner',
+    });
+    const newMember = await createTestUser(app, {
+      username: 'notifmember',
+      email: 'notifmember@example.com',
+      displayName: 'Notif Member',
+    });
+
+    const boardRes = await injectWithAuth(app, owner.cookies, {
+      method: 'POST',
+      url: '/api/v1/boards',
+      payload: { workspaceId: owner.workspace.id, name: 'Notif Board' },
+    });
+    const board = boardRes.json().board;
+
+    // Add new member to board
+    await injectWithAuth(app, owner.cookies, {
+      method: 'POST',
+      url: `/api/v1/boards/${board.id}/members`,
+      payload: { userId: newMember.user.id, role: 'normal' },
+    });
+
+    const res = await injectWithAuth(app, newMember.cookies, {
+      method: 'GET',
+      url: '/api/v1/notifications',
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    expect(body.notifications).toHaveLength(1);
+    const notif = body.notifications[0];
+    expect(notif.type).toBe('board_added');
+
+    // Verify ALL required data fields
+    expect(notif.data.boardId).toBe(board.id);
+    expect(notif.data.boardName).toBe('Notif Board');
+    expect(notif.data.actorId).toBe(owner.user.id);
+    expect(notif.data.actorDisplayName).toBe('Notif Owner');
+  });
+
+  it('GET /boards/:boardId should include members for notification actor display', async () => {
+    const { actor, recipient, board } = await setupTwoUsersWithBoard(app);
+
+    const res = await injectWithAuth(app, actor.cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${board.id}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+
+    // The board detail should include members so the client can resolve
+    // notification actor names and avatars
+    expect(body.members).toBeDefined();
+    expect(body.members).toBeInstanceOf(Array);
+    expect(body.members.length).toBeGreaterThanOrEqual(2);
+
+    const actorMember = body.members.find(
+      (m: any) => m.user?.id === actor.user.id || m.id === actor.user.id,
+    );
+    const recipientMember = body.members.find(
+      (m: any) => m.user?.id === recipient.user.id || m.id === recipient.user.id,
+    );
+    expect(actorMember).toBeDefined();
+    expect(recipientMember).toBeDefined();
+  });
+
+  it('notification data includes all fields: cardId, cardName, boardId, boardName, actorId, actorDisplayName', async () => {
+    const { actor, recipient, card, board } = await setupTwoUsersWithBoard(app);
+
+    // Trigger a card_assigned notification
+    await injectWithAuth(app, actor.cookies, {
+      method: 'POST',
+      url: `/api/v1/cards/${card.id}/members/${recipient.user.id}`,
+    });
+
+    const res = await injectWithAuth(app, recipient.cookies, {
+      method: 'GET',
+      url: '/api/v1/notifications',
+    });
+
+    const notif = res.json().notifications[0];
+
+    // Exhaustive field check
+    expect(notif.data).toHaveProperty('cardId');
+    expect(notif.data).toHaveProperty('cardName');
+    expect(notif.data).toHaveProperty('boardId');
+    expect(notif.data).toHaveProperty('boardName');
+    expect(notif.data).toHaveProperty('actorId');
+    expect(notif.data).toHaveProperty('actorDisplayName');
+
+    // Values should be correct, not null or undefined
+    expect(notif.data.cardId).toBe(card.id);
+    expect(notif.data.cardName).toBe('Test Card');
+    expect(notif.data.boardId).toBe(board.id);
+    expect(notif.data.boardName).toBe('Test Board');
+    expect(notif.data.actorId).toBe(actor.user.id);
+    expect(notif.data.actorDisplayName).toBe('Actor User');
+  });
+});

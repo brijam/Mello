@@ -66,14 +66,15 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const qs = params.toString();
     if (qs) listsUrl += `?${qs}`;
 
-    const [boardData, listData] = await Promise.all([
-      api.get<{ board: Board; labels: Label[]; members?: { id: string; displayName: string; username: string; avatarUrl: string | null }[] }>(`/boards/${boardId}`),
+    const [boardData, listData, memberData] = await Promise.all([
+      api.get<{ board: Board; labels: Label[] }>(`/boards/${boardId}`),
       api.get<{ lists: ListWithCards[] }>(listsUrl),
+      api.get<{ members: { user: { id: string; displayName: string; username: string; avatarUrl: string | null }; role: string }[] }>(`/boards/${boardId}/members`),
     ]);
     set({
       board: boardData.board,
       labels: boardData.labels,
-      members: boardData.members ?? [],
+      members: memberData.members.map((m) => m.user),
       lists: listData.lists,
       loading: false,
     });

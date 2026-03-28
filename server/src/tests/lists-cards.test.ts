@@ -349,6 +349,123 @@ describe('DELETE /api/v1/cards/:cardId/labels/:labelId', () => {
 
 // ── Move All Cards ─────────────────────────────────────────────────────────────
 
+// ── Bug 5: Delete card thorough testing ──────────────────────────────────────
+
+describe('DELETE /api/v1/cards/:cardId (thorough)', () => {
+  it('delete card returns 204', async () => {
+    const { cookies, board } = await setupBoard(app);
+    const list = await createList(app, cookies, board.id, 'List');
+    const card = await createCard(app, cookies, list.id, 'To Delete');
+
+    const res = await injectWithAuth(app, cookies, {
+      method: 'DELETE',
+      url: `/api/v1/cards/${card.id}`,
+    });
+    expect(res.statusCode).toBe(204);
+  });
+
+  it('after delete, GET /boards/:boardId/lists does NOT include the deleted card', async () => {
+    const { cookies, board } = await setupBoard(app);
+    const list = await createList(app, cookies, board.id, 'List');
+    const card1 = await createCard(app, cookies, list.id, 'Keep Me');
+    const card2 = await createCard(app, cookies, list.id, 'Delete Me');
+
+    // Delete card2
+    await injectWithAuth(app, cookies, {
+      method: 'DELETE',
+      url: `/api/v1/cards/${card2.id}`,
+    });
+
+    // GET board lists and verify deleted card is gone
+    const listsRes = await injectWithAuth(app, cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${board.id}/lists`,
+    });
+    expect(listsRes.statusCode).toBe(200);
+    const body = listsRes.json();
+    const allCards = body.lists.flatMap((l: any) => l.cards);
+    const cardIds = allCards.map((c: any) => c.id);
+    expect(cardIds).toContain(card1.id);
+    expect(cardIds).not.toContain(card2.id);
+  });
+
+  it('after delete, GET /cards/:cardId returns 404', async () => {
+    const { cookies, board } = await setupBoard(app);
+    const list = await createList(app, cookies, board.id, 'List');
+    const card = await createCard(app, cookies, list.id, 'To Delete');
+
+    await injectWithAuth(app, cookies, {
+      method: 'DELETE',
+      url: `/api/v1/cards/${card.id}`,
+    });
+
+    const getRes = await injectWithAuth(app, cookies, {
+      method: 'GET',
+      url: `/api/v1/cards/${card.id}`,
+    });
+    expect(getRes.statusCode).toBe(404);
+  });
+
+  it('delete a card that has labels, checklists, and comments — cascade works', async () => {
+    const { cookies, board, user } = await setupBoard(app);
+    const list = await createList(app, cookies, board.id, 'List');
+    const card = await createCard(app, cookies, list.id, 'Rich Card');
+
+    // Add a label
+    const boardRes = await injectWithAuth(app, cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${board.id}`,
+    });
+    const labelId = boardRes.json().labels[0].id;
+    await injectWithAuth(app, cookies, {
+      method: 'POST',
+      url: `/api/v1/cards/${card.id}/labels/${labelId}`,
+    });
+
+    // Add a checklist with items
+    const checklistRes = await injectWithAuth(app, cookies, {
+      method: 'POST',
+      url: `/api/v1/cards/${card.id}/checklists`,
+      payload: { name: 'My Checklist' },
+    });
+    const checklist = checklistRes.json().checklist;
+    await injectWithAuth(app, cookies, {
+      method: 'POST',
+      url: `/api/v1/checklists/${checklist.id}/items`,
+      payload: { name: 'Item 1' },
+    });
+
+    // Add a comment
+    await injectWithAuth(app, cookies, {
+      method: 'POST',
+      url: `/api/v1/cards/${card.id}/comments`,
+      payload: { body: 'A comment on this card' },
+    });
+
+    // Delete the card
+    const delRes = await injectWithAuth(app, cookies, {
+      method: 'DELETE',
+      url: `/api/v1/cards/${card.id}`,
+    });
+    expect(delRes.statusCode).toBe(204);
+
+    // Verify card is gone
+    const getRes = await injectWithAuth(app, cookies, {
+      method: 'GET',
+      url: `/api/v1/cards/${card.id}`,
+    });
+    expect(getRes.statusCode).toBe(404);
+
+    // Verify board lists no longer contain the card
+    const listsRes = await injectWithAuth(app, cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${board.id}/lists`,
+    });
+    const allCards = listsRes.json().lists.flatMap((l: any) => l.cards);
+    expect(allCards).toHaveLength(0);
+  });
+});
+
 describe('POST /api/v1/lists/:listId/move-all-cards', () => {
   it('moves all cards from one list to another', async () => {
     const { cookies, board } = await setupBoard(app);

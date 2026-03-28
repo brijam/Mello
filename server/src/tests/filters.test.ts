@@ -394,3 +394,55 @@ describe('GET /api/v1/boards/:boardId/lists (with filters)', () => {
     expect(cardIds).not.toContain(setup.cardC.id);
   });
 });
+
+// ── Bug 4: Board detail should return members for filter bar ─────────────────
+
+describe('GET /api/v1/boards/:boardId returns members (Bug 4)', () => {
+  it('returns members array alongside board and labels', async () => {
+    const setup = await setupBoardWithLabeledCards(app);
+
+    const res = await injectWithAuth(app, setup.cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${setup.board.id}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+
+    // Board and labels are already returned
+    expect(body.board).toBeDefined();
+    expect(body.labels).toBeDefined();
+
+    // Members should also be returned so the filter bar can display them
+    expect(body.members).toBeDefined();
+    expect(body.members).toBeInstanceOf(Array);
+    expect(body.members.length).toBeGreaterThanOrEqual(1);
+
+    // Verify member structure includes at least id and displayName
+    const ownerMember = body.members.find(
+      (m: any) => m.user?.id === setup.user.id || m.id === setup.user.id,
+    );
+    expect(ownerMember).toBeDefined();
+  });
+
+  it('filter by member works end-to-end: assign member to card, filter, verify card appears', async () => {
+    const setup = await setupBoardWithLabeledCards(app);
+
+    // Card A is already assigned to setup.user via setupBoardWithLabeledCards
+    // Filter for cards assigned to setup.user
+    const res = await injectWithAuth(app, setup.cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${setup.board.id}/lists?members=${setup.user.id}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const cardIds = getCardIds(body.lists);
+
+    // Card A and Card C are assigned to testUser in the setup helper
+    expect(cardIds).toContain(setup.cardA.id);
+    expect(cardIds).toContain(setup.cardC.id);
+    // Card B is assigned to user2, not testUser
+    expect(cardIds).not.toContain(setup.cardB.id);
+  });
+});

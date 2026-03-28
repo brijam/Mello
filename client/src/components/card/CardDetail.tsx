@@ -4,6 +4,7 @@ import { useBoardStore } from '../../stores/boardStore.js';
 import { useAuthStore } from '../../stores/authStore.js';
 import MarkdownRenderer from './MarkdownRenderer.js';
 import LabelPicker from './LabelPicker.js';
+import MemberPicker from './MemberPicker.js';
 import LabelBadge from '../board/LabelBadge.js';
 import CardChecklist from './CardChecklist.js';
 import CardComments from './CardComments.js';
@@ -53,11 +54,16 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
   // Label picker
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   const labelBtnRef = useRef<HTMLButtonElement>(null);
+
+  // Member picker
+  const [showMemberPicker, setShowMemberPicker] = useState(false);
+
   const attachmentFileInputRef = useRef<HTMLInputElement>(null);
 
   const user = useAuthStore((s) => s.user);
   const lists = useBoardStore((s) => s.lists);
   const labels = useBoardStore((s) => s.labels);
+  const members = useBoardStore((s) => s.members);
   const deleteCardStore = useBoardStore((s) => s.deleteCard);
   const updateCardStore = useBoardStore((s) => s.updateCard);
   const toggleCardLabelStore = useBoardStore((s) => s.toggleCardLabel);
@@ -348,9 +354,41 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
             Actions
           </h3>
           <div className="flex flex-col gap-2">
-            <button className="text-left text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded">
-              Members
-            </button>
+            <div className="relative">
+              <button
+                onClick={() => setShowMemberPicker((v) => !v)}
+                className="w-full text-left text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 px-3 py-2 rounded"
+              >
+                Members
+              </button>
+              {showMemberPicker && (
+                <div className="absolute left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                  <MemberPicker
+                    cardId={card.id}
+                    boardId={card.boardId}
+                    cardMemberIds={card.members.map((m) => m.id)}
+                    onToggle={(userId, added) => {
+                      setCard((prev) => {
+                        if (!prev) return prev;
+                        if (added) {
+                          const member = members.find((m) => m.id === userId);
+                          if (!member) return prev;
+                          return {
+                            ...prev,
+                            members: [...prev.members, { id: member.id, username: member.username, displayName: member.displayName, avatarUrl: member.avatarUrl }],
+                          };
+                        } else {
+                          return {
+                            ...prev,
+                            members: prev.members.filter((m) => m.id !== userId),
+                          };
+                        }
+                      });
+                    }}
+                  />
+                </div>
+              )}
+            </div>
             <div className="relative">
               <button
                 ref={labelBtnRef}
@@ -360,7 +398,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
                 Labels
               </button>
               {showLabelPicker && (
-                <div className="absolute right-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <div className="absolute left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                   <LabelPicker
                     cardId={card.id}
                     boardId={card.boardId}

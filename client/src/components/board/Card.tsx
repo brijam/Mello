@@ -91,6 +91,7 @@ export default function Card({ card, listId }: CardProps) {
               deleteCard(card.id);
             }}
             onPointerDown={(e) => e.stopPropagation()}
+            onPointerUp={(e) => e.stopPropagation()}
             className="text-gray-300 hover:text-gray-500 text-xs opacity-0 group-hover:opacity-100 transition-opacity ml-2"
           >
             &times;

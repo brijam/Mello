@@ -669,4 +669,145 @@ describe('GET /api/v1/search', () => {
       expect(body.nextCursor).toBeNull();
     });
   });
+
+  // ── Additional search source tests (Bug 3) ────────────────────────────────
+
+  describe('Search across additional content types', () => {
+    it('search matches card by description content', async () => {
+      const { cookies } = await setupBoardWithCards(app);
+
+      // "mockup" only appears in the description of "Implement homepage"
+      const res = await injectWithAuth(app, cookies, {
+        method: 'GET',
+        url: '/api/v1/search?q=mockup',
+      });
+
+      expect(res.statusCode).toBe(200);
+      const body = res.json();
+      expect(body.results.length).toBeGreaterThanOrEqual(1);
+      const match = body.results.find(
+        (r: any) => r.cardName === 'Implement homepage',
+      );
+      expect(match).toBeDefined();
+      expect(match.matchSource).toBe('description');
+    });
+
+    it('search matches card by checklist item name', async () => {
+      const testUser = await createTestUser(app);
+
+      const boardRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: '/api/v1/boards',
+        payload: { workspaceId: testUser.workspace.id, name: 'Checklist Board' },
+      });
+      const board = boardRes.json().board;
+
+      const listRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: `/api/v1/boards/${board.id}/lists`,
+        payload: { name: 'List' },
+      });
+      const list = listRes.json().list;
+
+      const cardRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: `/api/v1/lists/${list.id}/cards`,
+        payload: { name: 'Sprint tasks' },
+      });
+      const card = cardRes.json().card;
+
+      // Create a checklist with an item containing unique search term
+      const checklistRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: `/api/v1/cards/${card.id}/checklists`,
+        payload: { name: 'QA Steps' },
+      });
+      const checklist = checklistRes.json().checklist;
+
+      await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: `/api/v1/checklists/${checklist.id}/items`,
+        payload: { name: 'Verify the xylophone integration works' },
+      });
+
+      // Search for a term that only exists in the checklist item
+      const searchRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'GET',
+        url: '/api/v1/search?q=xylophone',
+      });
+
+      expect(searchRes.statusCode).toBe(200);
+      const body = searchRes.json();
+      expect(body.results.length).toBeGreaterThanOrEqual(1);
+      const match = body.results.find(
+        (r: any) => r.cardName === 'Sprint tasks',
+      );
+      expect(match).toBeDefined();
+      expect(match.matchSource).toBe('checklist');
+    });
+
+    it('search matches card by attachment filename', async () => {
+      const testUser = await createTestUser(app);
+
+      const boardRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: '/api/v1/boards',
+        payload: { workspaceId: testUser.workspace.id, name: 'Attachment Board' },
+      });
+      const board = boardRes.json().board;
+
+      const listRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: `/api/v1/boards/${board.id}/lists`,
+        payload: { name: 'List' },
+      });
+      const list = listRes.json().list;
+
+      const cardRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'POST',
+        url: `/api/v1/lists/${list.id}/cards`,
+        payload: { name: 'Documentation card' },
+      });
+      const card = cardRes.json().card;
+
+      // Upload an attachment with a unique filename
+      // Use multipart form to upload a file
+      const boundary = '----TestBoundary';
+      const fileContent = 'test file content';
+      const fileName = 'zephyrblueprint-architecture.pdf';
+      const multipartBody = [
+        `--${boundary}`,
+        `Content-Disposition: form-data; name="file"; filename="${fileName}"`,
+        'Content-Type: application/pdf',
+        '',
+        fileContent,
+        `--${boundary}--`,
+      ].join('\r\n');
+
+      await app.inject({
+        method: 'POST',
+        url: `/api/v1/cards/${card.id}/attachments`,
+        headers: {
+          cookie: testUser.cookies,
+          'content-type': `multipart/form-data; boundary=${boundary}`,
+        },
+        payload: multipartBody,
+      });
+
+      // Search for a term that only exists in the attachment filename
+      const searchRes = await injectWithAuth(app, testUser.cookies, {
+        method: 'GET',
+        url: '/api/v1/search?q=zephyrblueprint',
+      });
+
+      expect(searchRes.statusCode).toBe(200);
+      const body = searchRes.json();
+      expect(body.results.length).toBeGreaterThanOrEqual(1);
+      const match = body.results.find(
+        (r: any) => r.cardName === 'Documentation card',
+      );
+      expect(match).toBeDefined();
+      expect(match.matchSource).toBe('attachment');
+    });
+  });
 });
