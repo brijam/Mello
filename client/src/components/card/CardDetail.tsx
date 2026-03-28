@@ -194,7 +194,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-xl max-w-[48rem] w-full p-8 text-center text-gray-500">
+      <div className="bg-white rounded-lg shadow-xl max-w-[72rem] w-full p-8 text-center text-gray-500">
         Loading card...
       </div>
     );
@@ -202,7 +202,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
 
   if (error || !card) {
     return (
-      <div className="bg-white rounded-lg shadow-xl max-w-[48rem] w-full p-8 text-center">
+      <div className="bg-white rounded-lg shadow-xl max-w-[72rem] w-full p-8 text-center">
         <p className="text-red-600 mb-4">{error ?? 'Card not found'}</p>
         <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">
           Close
@@ -213,7 +213,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
 
   return (
     <div
-      className="bg-white rounded-lg shadow-xl max-w-[48rem] w-full max-h-[85vh] overflow-y-auto relative"
+      className="bg-white rounded-lg shadow-xl max-w-[72rem] w-full max-h-[85vh] overflow-y-auto relative"
       onClick={(e) => e.stopPropagation()}
     >
       {/* Close button */}
@@ -328,7 +328,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
                 Labels
               </h3>
-              <div className="flex flex-wrap gap-1.5">
+              <div className="flex flex-wrap gap-1.5 justify-center">
                 {card.labels.map((label) => (
                   <LabelBadge key={label.id} color={label.color} name={label.name} size="md" />
                 ))}
@@ -342,7 +342,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
                 Members
               </h3>
-              <div className="flex flex-wrap gap-2">
+              <div className="flex flex-wrap gap-2 justify-center">
                 {card.members.map((member) => (
                   <div key={member.id} className="flex items-center gap-1.5">
                     <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-sm font-medium text-white flex-shrink-0">

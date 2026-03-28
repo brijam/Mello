@@ -363,12 +363,12 @@ export default function BoardPage() {
 
           <DragOverlay dropAnimation={null}>
             {activeType === 'card' && activeCard ? (
-              <div className="bg-white rounded-lg shadow-lg px-3 py-2 w-[18rem] rotate-2">
+              <div className="bg-white rounded-lg shadow-lg px-3 py-2 w-[27rem] rotate-2">
                 <span className="text-sm text-gray-800">{activeCard.name}</span>
               </div>
             ) : null}
             {activeType === 'list' && activeList ? (
-              <div className="bg-gray-200 rounded-xl w-[18rem] px-3 py-2 shadow-lg rotate-2 opacity-90">
+              <div className="bg-gray-200 rounded-xl w-[27rem] px-3 py-2 shadow-lg rotate-2 opacity-90">
                 <h3 className="font-semibold text-sm text-gray-800">{activeList.name}</h3>
                 <div className="text-sm text-gray-500 mt-1">
                   {activeList.cards.length} card{activeList.cards.length !== 1 ? 's' : ''}

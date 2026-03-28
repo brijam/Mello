@@ -59,7 +59,7 @@ export default function List({ list }: ListProps) {
     <div
       ref={setNodeRef}
       style={style}
-      className="bg-gray-200 rounded-xl w-[18rem] flex-shrink-0 flex flex-col max-h-[calc(100vh-120px)]"
+      className="bg-gray-200 rounded-xl w-[27rem] flex-shrink-0 flex flex-col max-h-[calc(100vh-120px)]"
     >
       <div
         {...attributes}
