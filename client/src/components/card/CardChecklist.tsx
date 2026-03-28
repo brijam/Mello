@@ -151,7 +151,7 @@ export default function CardChecklist({ checklist, onUpdate }: CardChecklistProp
         )}
         <button
           onClick={handleDeleteChecklist}
-          className="text-xs text-gray-400 hover:text-red-500 px-2 py-1"
+          className="text-sm text-gray-400 hover:text-red-500 px-2 py-1"
           title="Delete checklist"
         >
           Delete
@@ -161,14 +161,14 @@ export default function CardChecklist({ checklist, onUpdate }: CardChecklistProp
       {/* Progress bar */}
       {totalCount > 0 && (
         <div className="flex items-center gap-2 mb-2">
-          <span className="text-xs text-gray-500 w-8 text-right">{progressPercent}%</span>
+          <span className="text-sm text-gray-500 w-8 text-right">{progressPercent}%</span>
           <div className="flex-1 bg-gray-200 rounded-full h-2">
             <div
               className={`h-2 rounded-full transition-all ${progressPercent === 100 ? 'bg-green-500' : 'bg-blue-500'}`}
               style={{ width: `${progressPercent}%` }}
             />
           </div>
-          <span className="text-xs text-gray-500">{checkedCount}/{totalCount}</span>
+          <span className="text-sm text-gray-500">{checkedCount}/{totalCount}</span>
         </div>
       )}
 

@@ -116,11 +116,28 @@ export async function listRoutes(app: FastifyInstance) {
       labelsByCard.set(row.cardId, arr);
     }
 
+    // Fetch card-member associations for remaining cards
+    let cardAssignmentRows: { cardId: string; userId: string }[] = [];
+    if (cardIds.length > 0) {
+      cardAssignmentRows = await db
+        .select({ cardId: cardAssignments.cardId, userId: cardAssignments.userId })
+        .from(cardAssignments)
+        .where(inArray(cardAssignments.cardId, cardIds));
+    }
+
+    // Build a map of cardId -> memberIds[]
+    const membersByCard = new Map<string, string[]>();
+    for (const row of cardAssignmentRows) {
+      const arr = membersByCard.get(row.cardId) ?? [];
+      arr.push(row.userId);
+      membersByCard.set(row.cardId, arr);
+    }
+
     // Group cards by list
-    const cardsByList = new Map<string, (typeof boardCards[number] & { labelIds: string[] })[]>();
+    const cardsByList = new Map<string, (typeof boardCards[number] & { labelIds: string[]; memberIds: string[] })[]>();
     for (const card of boardCards) {
       const listCards = cardsByList.get(card.listId) ?? [];
-      listCards.push({ ...card, labelIds: labelsByCard.get(card.id) ?? [] });
+      listCards.push({ ...card, labelIds: labelsByCard.get(card.id) ?? [], memberIds: membersByCard.get(card.id) ?? [] });
       cardsByList.set(card.listId, listCards);
     }
 

@@ -24,7 +24,7 @@ export default function RegisterPage() {
 
   return (
     <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-mello-blue to-blue-900">
-      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-md">
+      <div className="bg-white rounded-lg shadow-xl p-8 w-full max-w-[28rem]">
         <h1 className="text-3xl font-bold text-center text-gray-800 mb-2">Mello</h1>
         <p className="text-center text-gray-500 mb-6">Create your account</p>
 

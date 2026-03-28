@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../../api/client.js';
 import { useBoardStore } from '../../stores/boardStore.js';
 import { useAuthStore } from '../../stores/authStore.js';
@@ -29,6 +29,25 @@ interface CardDetailData {
   }[];
   attachments: unknown[];
   commentCount: number;
+}
+
+/** Click-outside wrapper for the label picker dropdown */
+function LabelPickerDropdown({ onClose, children }: { onClose: () => void; children: React.ReactNode }) {
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    function handleMouseDown(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        onClose();
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, [onClose]);
+  return (
+    <div ref={ref} className="absolute left-0 mt-1 w-[20rem] bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+      {children}
+    </div>
+  );
 }
 
 interface CardDetailProps {
@@ -175,7 +194,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
 
   if (loading) {
     return (
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full p-8 text-center text-gray-500">
+      <div className="bg-white rounded-lg shadow-xl max-w-[48rem] w-full p-8 text-center text-gray-500">
         Loading card...
       </div>
     );
@@ -183,7 +202,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
 
   if (error || !card) {
     return (
-      <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full p-8 text-center">
+      <div className="bg-white rounded-lg shadow-xl max-w-[48rem] w-full p-8 text-center">
         <p className="text-red-600 mb-4">{error ?? 'Card not found'}</p>
         <button onClick={onClose} className="text-sm text-gray-500 hover:text-gray-700">
           Close
@@ -194,7 +213,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
 
   return (
     <div
-      className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] overflow-y-auto relative"
+      className="bg-white rounded-lg shadow-xl max-w-[48rem] w-full max-h-[85vh] overflow-y-auto relative"
       onClick={(e) => e.stopPropagation()}
     >
       {/* Close button */}
@@ -317,6 +336,25 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
             </section>
           )}
 
+          {/* Members */}
+          {card.members.length > 0 && (
+            <section className="mb-6">
+              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
+                Members
+              </h3>
+              <div className="flex flex-wrap gap-2">
+                {card.members.map((member) => (
+                  <div key={member.id} className="flex items-center gap-1.5">
+                    <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-sm font-medium text-white flex-shrink-0">
+                      {member.displayName.charAt(0).toUpperCase()}
+                    </div>
+                    <span className="text-sm text-gray-700">{member.displayName}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
           {card.checklists.length > 0 && (
             <section className="mb-6">
               <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
@@ -362,7 +400,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
                 Members
               </button>
               {showMemberPicker && (
-                <div className="absolute left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <div className="absolute left-0 mt-1 w-[20rem] bg-white border border-gray-200 rounded-lg shadow-lg z-50">
                   <MemberPicker
                     cardId={card.id}
                     boardId={card.boardId}
@@ -398,11 +436,12 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
                 Labels
               </button>
               {showLabelPicker && (
-                <div className="absolute left-0 mt-1 w-64 bg-white border border-gray-200 rounded-lg shadow-lg z-50">
+                <LabelPickerDropdown onClose={() => setShowLabelPicker(false)}>
                   <LabelPicker
                     cardId={card.id}
                     boardId={card.boardId}
                     cardLabelIds={card.labels.map((l) => l.id)}
+                    onClose={() => setShowLabelPicker(false)}
                     onToggle={(labelId, added) => {
                       toggleCardLabelStore(card.id, labelId, added);
                       // Update local card state
@@ -424,7 +463,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
                       });
                     }}
                   />
-                </div>
+                </LabelPickerDropdown>
               )}
             </div>
             <button

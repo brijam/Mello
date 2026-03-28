@@ -72,6 +72,9 @@ export default function BoardPage() {
   }, [boardId, clear]);
 
   // Fetch/refetch board whenever filters change
+  const labelsKey = searchParams.get('labels') ?? '';
+  const membersKey = searchParams.get('members') ?? '';
+
   useEffect(() => {
     if (boardId) {
       const filters: { labels?: string[]; members?: string[] } = {};
@@ -79,7 +82,7 @@ export default function BoardPage() {
       if (activeMembers.length) filters.members = activeMembers;
       fetchBoard(boardId, Object.keys(filters).length ? filters : undefined);
     }
-  }, [boardId, fetchBoard, activeLabels.join(','), activeMembers.join(',')]);
+  }, [boardId, fetchBoard, labelsKey, membersKey]);
 
   // Filter toggle handlers
   const handleToggleLabel = useCallback(

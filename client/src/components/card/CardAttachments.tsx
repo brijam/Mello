@@ -134,7 +134,7 @@ export default function CardAttachments({ cardId, attachments, onRefresh, curren
             <p className="text-sm text-gray-600 font-medium">
               Drop a file here or click to browse
             </p>
-            <p className="text-xs text-gray-400 mt-1">Max file size: 25 MB</p>
+            <p className="text-sm text-gray-400 mt-1">Max file size: 25 MB</p>
           </div>
         )}
       </div>
@@ -180,7 +180,7 @@ export default function CardAttachments({ cardId, attachments, onRefresh, curren
                 >
                   {att.filename}
                 </a>
-                <p className="text-xs text-gray-500 mt-0.5">
+                <p className="text-sm text-gray-500 mt-0.5">
                   {formatFileSize(att.sizeBytes)} -- {formatDate(att.createdAt)}
                 </p>
               </div>

@@ -9,9 +9,10 @@ interface LabelPickerProps {
   boardId: string;
   cardLabelIds: string[];
   onToggle: (labelId: string, added: boolean) => void;
+  onClose: () => void;
 }
 
-export default function LabelPicker({ cardId, boardId, cardLabelIds, onToggle }: LabelPickerProps) {
+export default function LabelPicker({ cardId, boardId, cardLabelIds, onToggle, onClose }: LabelPickerProps) {
   const labels = useBoardStore((s) => s.labels);
   const [editingLabel, setEditingLabel] = useState<
     { id: string; name: string | null; color: string } | 'new' | null
@@ -51,7 +52,16 @@ export default function LabelPicker({ cardId, boardId, cardLabelIds, onToggle }:
 
   return (
     <div className="p-3 space-y-2">
-      <h4 className="text-sm font-semibold text-gray-700 text-center">Labels</h4>
+      <div className="flex items-center justify-between">
+        <h4 className="text-sm font-semibold text-gray-700">Labels</h4>
+        <button
+          onClick={onClose}
+          className="text-gray-400 hover:text-gray-600 text-xl leading-none"
+          title="Close"
+        >
+          &times;
+        </button>
+      </div>
 
       <div className="space-y-1">
         {labels.map((label) => {

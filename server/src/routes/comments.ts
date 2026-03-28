@@ -75,8 +75,6 @@ export async function commentRoutes(app: FastifyInstance) {
           // Look up the mentioned user
           const [mentionedUser] = await db.select().from(users).where(eq(users.username, username));
           if (!mentionedUser) continue;
-          // Skip self-mention
-          if (mentionedUser.id === request.userId!) continue;
           // Verify they're on the board
           const [membership] = await db.select().from(boardMembers).where(
             and(

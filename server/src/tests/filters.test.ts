@@ -446,3 +446,63 @@ describe('GET /api/v1/boards/:boardId returns members (Bug 4)', () => {
     expect(cardIds).not.toContain(setup.cardB.id);
   });
 });
+
+// ── Bug 3: Filter end-to-end with card assignments ────────────────────────────
+
+describe('Filter end-to-end with card assignments', () => {
+  it('member filter returns cards assigned to that member after assignment', async () => {
+    const testUser = await createTestUser(app);
+
+    // Create board
+    const boardRes = await injectWithAuth(app, testUser.cookies, {
+      method: 'POST',
+      url: '/api/v1/boards',
+      payload: { workspaceId: testUser.workspace.id, name: 'Filter Assignment Board' },
+    });
+    const board = boardRes.json().board;
+
+    // Create a list
+    const listRes = await injectWithAuth(app, testUser.cookies, {
+      method: 'POST',
+      url: `/api/v1/boards/${board.id}/lists`,
+      payload: { name: 'To Do' },
+    });
+    const list = listRes.json().list;
+
+    // Create two cards
+    const card1Res = await injectWithAuth(app, testUser.cookies, {
+      method: 'POST',
+      url: `/api/v1/lists/${list.id}/cards`,
+      payload: { name: 'Card 1' },
+    });
+    const card1 = card1Res.json().card;
+
+    const card2Res = await injectWithAuth(app, testUser.cookies, {
+      method: 'POST',
+      url: `/api/v1/lists/${list.id}/cards`,
+      payload: { name: 'Card 2' },
+    });
+    const card2 = card2Res.json().card;
+
+    // Assign user to card1 only
+    await injectWithAuth(app, testUser.cookies, {
+      method: 'POST',
+      url: `/api/v1/cards/${card1.id}/members/${testUser.user.id}`,
+    });
+
+    // Filter by member
+    const res = await injectWithAuth(app, testUser.cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${board.id}/lists?members=${testUser.user.id}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const allCards = body.lists.flatMap((l: any) => l.cards);
+    const cardIds = allCards.map((c: any) => c.id);
+
+    // Only card1 should be returned
+    expect(cardIds).toContain(card1.id);
+    expect(cardIds).not.toContain(card2.id);
+  });
+});

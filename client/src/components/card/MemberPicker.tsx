@@ -34,7 +34,7 @@ export default function MemberPicker({ cardId, cardMemberIds, onToggle }: Member
 
       <div className="space-y-1">
         {members.length === 0 && (
-          <p className="text-xs text-gray-500 text-center py-2">No board members found</p>
+          <p className="text-sm text-gray-500 text-center py-2">No board members found</p>
         )}
         {members.map((member) => {
           const isAssigned = cardMemberIds.includes(member.id);
@@ -47,7 +47,7 @@ export default function MemberPicker({ cardId, cardMemberIds, onToggle }: Member
                 isAssigned ? 'bg-blue-50' : ''
               }`}
             >
-              <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-xs font-medium text-white flex-shrink-0 overflow-hidden">
+              <div className="w-7 h-7 rounded-full bg-gray-300 flex items-center justify-center text-sm font-medium text-white flex-shrink-0 overflow-hidden">
                 {member.avatarUrl ? (
                   <img src={member.avatarUrl} alt="" className="w-full h-full object-cover" />
                 ) : (

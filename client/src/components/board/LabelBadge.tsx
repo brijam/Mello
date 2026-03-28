@@ -20,7 +20,7 @@ export default function LabelBadge({ color, name, size = 'sm' }: LabelBadgeProps
 
   return (
     <span
-      className={`${bgClass} inline-flex items-center rounded px-2 py-0.5 text-xs font-medium text-white min-w-[48px]`}
+      className={`${bgClass} inline-flex items-center rounded px-2 py-0.5 text-sm font-medium text-white min-w-[48px]`}
     >
       {name ?? ''}
     </span>

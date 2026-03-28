@@ -43,13 +43,13 @@ export default function LabelEditor({ boardId, label, onSave, onCancel }: LabelE
   }
 
   return (
-    <div className="p-3 space-y-3">
+    <div className="p-3 space-y-3 min-w-[280px]">
       <h4 className="text-sm font-semibold text-gray-700 text-center">
         {isEditing ? 'Edit Label' : 'Create Label'}
       </h4>
 
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Name</label>
+        <label className="block text-sm font-medium text-gray-600 mb-1">Name</label>
         <input
           type="text"
           value={name}
@@ -60,7 +60,7 @@ export default function LabelEditor({ boardId, label, onSave, onCancel }: LabelE
       </div>
 
       <div>
-        <label className="block text-xs font-medium text-gray-600 mb-1">Color</label>
+        <label className="block text-sm font-medium text-gray-600 mb-1">Color</label>
         <div className="grid grid-cols-5 gap-1.5">
           {LABEL_COLORS.map((c) => (
             <button

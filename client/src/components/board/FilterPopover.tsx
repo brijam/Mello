@@ -20,7 +20,7 @@ export default function FilterPopover({
   onClose,
 }: FilterPopoverProps) {
   return (
-    <div className="absolute top-full left-0 mt-2 w-80 bg-white rounded-xl shadow-xl border border-gray-200 z-50">
+    <div className="absolute top-full left-0 mt-2 w-[20rem] bg-white rounded-xl shadow-xl border border-gray-200 z-50">
       {/* Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-gray-200">
         <h3 className="text-base font-semibold text-gray-800">Filter Cards</h3>

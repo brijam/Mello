@@ -20,6 +20,7 @@ interface CardSummary {
   description: string | null;
   position: number;
   labelIds: string[];
+  memberIds: string[];
   createdAt: string;
   updatedAt: string;
 }
@@ -58,7 +59,10 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   loading: false,
 
   fetchBoard: async (boardId, filters) => {
-    set({ loading: true });
+    const currentBoard = get().board;
+    if (!currentBoard || currentBoard.id !== boardId) {
+      set({ loading: true });
+    }
     let listsUrl = `/boards/${boardId}/lists`;
     const params = new URLSearchParams();
     if (filters?.labels?.length) params.set('labels', filters.labels.join(','));
@@ -90,7 +94,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
 
   addCard: async (listId, name) => {
     const data = await api.post<{ card: CardSummary }>(`/lists/${listId}/cards`, { name });
-    const card = { ...data.card, labelIds: data.card.labelIds ?? [] };
+    const card = { ...data.card, labelIds: data.card.labelIds ?? [], memberIds: data.card.memberIds ?? [] };
     set((state) => ({
       lists: state.lists.map((list) => {
         if (list.id !== listId) return list;

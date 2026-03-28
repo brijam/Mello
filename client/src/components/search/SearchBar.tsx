@@ -76,7 +76,7 @@ export default function SearchBar() {
             }}
           >
             <div
-              className="bg-white rounded-xl shadow-2xl max-w-2xl w-full mx-4 overflow-hidden"
+              className="bg-white rounded-xl shadow-2xl max-w-[42rem] w-full mx-4 overflow-hidden"
               onClick={(e) => e.stopPropagation()}
             >
               {/* Search input inside overlay */}

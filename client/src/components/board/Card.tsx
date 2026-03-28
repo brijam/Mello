@@ -12,12 +12,13 @@ interface CardProps {
     name: string;
     description: string | null;
     labelIds?: string[];
+    memberIds?: string[];
   };
   listId: string;
 }
 
 export default function Card({ card, listId }: CardProps) {
-  const { deleteCard, labels } = useBoardStore();
+  const { deleteCard, labels, members } = useBoardStore();
   const [showDetail, setShowDetail] = useState(false);
   const didDrag = useRef(false);
   const pointerStart = useRef<{ x: number; y: number } | null>(null);
@@ -45,6 +46,7 @@ export default function Card({ card, listId }: CardProps) {
   };
 
   const cardLabels = labels.filter((l) => card.labelIds?.includes(l.id));
+  const cardMembers = members.filter((m) => card.memberIds?.includes(m.id));
 
   return (
     <>
@@ -100,6 +102,19 @@ export default function Card({ card, listId }: CardProps) {
         {card.description && (
           <div className="mt-1 text-sm text-gray-400">
             &#x1F4DD;
+          </div>
+        )}
+        {cardMembers.length > 0 && (
+          <div className="flex flex-wrap gap-1 mt-1.5 justify-end">
+            {cardMembers.map((member) => (
+              <div
+                key={member.id}
+                className="w-6 h-6 rounded-full bg-blue-500 flex items-center justify-center text-sm font-medium text-white flex-shrink-0"
+                title={member.displayName}
+              >
+                {member.displayName.charAt(0).toUpperCase()}
+              </div>
+            ))}
           </div>
         )}
       </div>

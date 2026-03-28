@@ -16,7 +16,7 @@ export default function FontSizeSelector() {
         <button
           key={opt.value}
           onClick={() => setFontSize(opt.value)}
-          className={`px-2 py-1 text-xs font-medium transition-colors ${
+          className={`px-2 py-1 text-sm font-medium transition-colors ${
             fontSize === opt.value
               ? 'bg-white/30 text-white'
               : 'text-white/70 hover:bg-white/20 hover:text-white'

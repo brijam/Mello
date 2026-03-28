@@ -499,3 +499,51 @@ describe('POST /api/v1/lists/:listId/move-all-cards', () => {
     expect(targetList.cards).toHaveLength(3);
   });
 });
+
+// ── Bug 2: Card listings should include memberIds ─────────────────────────────
+
+describe('GET /boards/:boardId/lists includes memberIds on cards', () => {
+  it('cards include memberIds after member assignment', async () => {
+    const { cookies, board, user } = await setupBoard(app);
+    const list = await createList(app, cookies, board.id, 'To Do');
+    const card = await createCard(app, cookies, list.id, 'Card With Member');
+
+    // Assign the user to the card
+    await injectWithAuth(app, cookies, {
+      method: 'POST',
+      url: `/api/v1/cards/${card.id}/members/${user.id}`,
+    });
+
+    // Fetch lists
+    const res = await injectWithAuth(app, cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${board.id}/lists`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const returnedCard = body.lists[0].cards[0];
+    expect(returnedCard.memberIds).toBeDefined();
+    expect(returnedCard.memberIds).toBeInstanceOf(Array);
+    expect(returnedCard.memberIds).toContain(user.id);
+  });
+
+  it('cards include empty memberIds when no members assigned', async () => {
+    const { cookies, board } = await setupBoard(app);
+    const list = await createList(app, cookies, board.id, 'To Do');
+    await createCard(app, cookies, list.id, 'Card Without Member');
+
+    // Fetch lists
+    const res = await injectWithAuth(app, cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${board.id}/lists`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const returnedCard = body.lists[0].cards[0];
+    expect(returnedCard.memberIds).toBeDefined();
+    expect(returnedCard.memberIds).toBeInstanceOf(Array);
+    expect(returnedCard.memberIds).toEqual([]);
+  });
+});
