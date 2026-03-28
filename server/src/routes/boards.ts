@@ -168,7 +168,27 @@ export async function boardRoutes(app: FastifyInstance) {
 
     const boardCards = await db.select().from(cards).where(eq(cards.boardId, boardId)).orderBy(asc(cards.position));
 
-    return { board, labels: boardLabels, lists: boardLists, cards: boardCards };
+    // Fetch board members
+    const memberRows = await db
+      .select({
+        userId: users.id,
+        username: users.username,
+        displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
+        role: boardMembers.role,
+        joinedAt: boardMembers.joinedAt,
+      })
+      .from(boardMembers)
+      .innerJoin(users, eq(boardMembers.userId, users.id))
+      .where(eq(boardMembers.boardId, boardId));
+
+    const members = memberRows.map((r) => ({
+      user: { id: r.userId, username: r.username, displayName: r.displayName, avatarUrl: r.avatarUrl },
+      role: r.role,
+      joinedAt: r.joinedAt,
+    }));
+
+    return { board, labels: boardLabels, lists: boardLists, cards: boardCards, members };
   });
 
   // Update board
@@ -229,19 +249,20 @@ export async function boardRoutes(app: FastifyInstance) {
     preHandler: [requireAuth, requireBoardRole('admin')],
   }, async (request, reply) => {
     const { boardId } = request.params as { boardId: string };
-    const { userId, role } = request.body as { userId: string; role: 'admin' | 'normal' | 'observer' };
+    const body = request.body as { userId: string; role?: 'admin' | 'normal' | 'observer' };
+    const role = body.role ?? 'normal';
 
-    await db.insert(boardMembers).values({ boardId, userId, role }).onConflictDoUpdate({
+    await db.insert(boardMembers).values({ boardId, userId: body.userId, role }).onConflictDoUpdate({
       target: [boardMembers.boardId, boardMembers.userId],
       set: { role },
     });
 
     // Create notification if adding someone else
-    if (userId !== request.userId!) {
+    if (body.userId !== request.userId!) {
       const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
       const [actor] = await db.select().from(users).where(eq(users.id, request.userId!));
       if (board && actor) {
-        await createNotification(userId, 'board_added', {
+        await createNotification(body.userId, 'board_added', {
           boardId: board.id,
           boardName: board.name,
           actorId: actor.id,
@@ -250,7 +271,7 @@ export async function boardRoutes(app: FastifyInstance) {
       }
     }
 
-    broadcast(app.io, boardId, WS_EVENTS.MEMBER_ADDED, { boardId, userId, role });
+    broadcast(app.io, boardId, WS_EVENTS.MEMBER_ADDED, { boardId, userId: body.userId, role });
     return reply.status(201).send({ ok: true });
   });
 

@@ -175,22 +175,84 @@ export async function searchRoutes(app: FastifyInstance) {
       ORDER BY c.id, ts_rank(cm.search_vector, websearch_to_tsquery('english', ${q})) DESC
     `;
 
+    // Checklist item matches query
+    const checklistMatchesQuery = sql`
+      SELECT DISTINCT ON (c.id)
+        c.id AS card_id,
+        c.name AS card_name,
+        l.id AS list_id,
+        l.name AS list_name,
+        b.id AS board_id,
+        b.name AS board_name,
+        b.workspace_id,
+        'checklist'::text AS match_source,
+        ts_headline('english', ci.name, websearch_to_tsquery('english', ${q}), 'MaxWords=35, MinWords=15, MaxFragments=1, StartSel=<mark>, StopSel=</mark>') AS snippet,
+        ts_rank(to_tsvector('english', ci.name), websearch_to_tsquery('english', ${q})) AS rank
+      FROM checklist_items ci
+      JOIN checklists cl ON cl.id = ci.checklist_id
+      JOIN cards c ON c.id = cl.card_id
+      JOIN lists l ON l.id = c.list_id
+      JOIN boards b ON b.id = c.board_id
+      JOIN board_members bm ON bm.board_id = b.id AND bm.user_id = ${userId}
+      WHERE to_tsvector('english', ci.name) @@ websearch_to_tsquery('english', ${q})
+      ${wsFilter}
+      ${boardFilter}
+      ${labelFilter}
+      ${memberFilter}
+      ORDER BY c.id, ts_rank(to_tsvector('english', ci.name), websearch_to_tsquery('english', ${q})) DESC
+    `;
+
+    // Attachment filename matches query
+    const attachmentMatchesQuery = sql`
+      SELECT DISTINCT ON (c.id)
+        c.id AS card_id,
+        c.name AS card_name,
+        l.id AS list_id,
+        l.name AS list_name,
+        b.id AS board_id,
+        b.name AS board_name,
+        b.workspace_id,
+        'attachment'::text AS match_source,
+        ts_headline('english', replace(replace(a.filename, '-', ' '), '.', ' '), websearch_to_tsquery('english', ${q}), 'MaxWords=35, MinWords=15, MaxFragments=1, StartSel=<mark>, StopSel=</mark>') AS snippet,
+        ts_rank(to_tsvector('english', replace(replace(a.filename, '-', ' '), '.', ' ')), websearch_to_tsquery('english', ${q})) AS rank
+      FROM attachments a
+      JOIN cards c ON c.id = a.card_id
+      JOIN lists l ON l.id = c.list_id
+      JOIN boards b ON b.id = c.board_id
+      JOIN board_members bm ON bm.board_id = b.id AND bm.user_id = ${userId}
+      WHERE to_tsvector('english', replace(replace(a.filename, '-', ' '), '.', ' ')) @@ websearch_to_tsquery('english', ${q})
+      ${wsFilter}
+      ${boardFilter}
+      ${labelFilter}
+      ${memberFilter}
+      ORDER BY c.id, ts_rank(to_tsvector('english', replace(replace(a.filename, '-', ' '), '.', ' ')), websearch_to_tsquery('english', ${q})) DESC
+    `;
+
     // Combined query with deduplication and pagination
     let cursorCombinedFilter = sql``;
     if (cursorData) {
-      // Exclude all cards already seen: rank must be strictly less, OR same rank with lower card_id
-      // Use text comparison on rank to avoid float precision issues
       cursorCombinedFilter = sql` WHERE r.card_id <> ${cursorData.cardId}::uuid AND (r.rank < ${sql.raw(String(cursorData.rank))}::double precision OR (r.rank <= ${sql.raw(String(cursorData.rank))}::double precision AND r.card_id < ${cursorData.cardId}::uuid))`;
     }
 
     const fullQuery = sql`
       WITH card_matches AS (${cardMatchesQuery}),
       comment_matches AS (${commentMatchesQuery}),
+      checklist_matches AS (${checklistMatchesQuery}),
+      attachment_matches AS (${attachmentMatchesQuery}),
       combined AS (
         SELECT * FROM card_matches
         UNION ALL
         SELECT * FROM comment_matches
         WHERE comment_matches.card_id NOT IN (SELECT card_id FROM card_matches)
+        UNION ALL
+        SELECT * FROM checklist_matches
+        WHERE checklist_matches.card_id NOT IN (SELECT card_id FROM card_matches)
+          AND checklist_matches.card_id NOT IN (SELECT card_id FROM comment_matches)
+        UNION ALL
+        SELECT * FROM attachment_matches
+        WHERE attachment_matches.card_id NOT IN (SELECT card_id FROM card_matches)
+          AND attachment_matches.card_id NOT IN (SELECT card_id FROM comment_matches)
+          AND attachment_matches.card_id NOT IN (SELECT card_id FROM checklist_matches)
       )
       SELECT r.*
       FROM combined r

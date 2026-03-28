@@ -245,24 +245,31 @@ export async function cardRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
   }, async (request, reply) => {
     const { cardId, userId } = request.params as { cardId: string; userId: string };
+
+    // Verify the target user is a member of the card's board
+    const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
+    if (!card) throw new NotFoundError('Card');
+
+    const [bm] = await db.select().from(boardMembers).where(
+      and(eq(boardMembers.boardId, card.boardId), eq(boardMembers.userId, userId)),
+    );
+    if (!bm) throw new ForbiddenError('User is not a member of this board');
+
     await db.insert(cardAssignments).values({ cardId, userId }).onConflictDoNothing();
 
     // Create notification if assigning someone else
     if (userId !== request.userId!) {
-      const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
-      if (card) {
-        const [board] = await db.select().from(boards).where(eq(boards.id, card.boardId));
-        const [actor] = await db.select().from(users).where(eq(users.id, request.userId!));
-        if (board && actor) {
-          await createNotification(userId, 'card_assigned', {
-            cardId: card.id,
-            cardName: card.name,
-            boardId: board.id,
-            boardName: board.name,
-            actorId: actor.id,
-            actorDisplayName: actor.displayName,
-          });
-        }
+      const [board] = await db.select().from(boards).where(eq(boards.id, card.boardId));
+      const [actor] = await db.select().from(users).where(eq(users.id, request.userId!));
+      if (board && actor) {
+        await createNotification(userId, 'card_assigned', {
+          cardId: card.id,
+          cardName: card.name,
+          boardId: board.id,
+          boardName: board.name,
+          actorId: actor.id,
+          actorDisplayName: actor.displayName,
+        });
       }
     }
 

@@ -56,7 +56,8 @@
       "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/search.test.ts -t \"cursor\")",
       "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/templates.test.ts src/tests/backgrounds.test.ts src/tests/copy-move.test.ts)",
       "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run)",
-      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/copy-move.test.ts -t \"non-existent target board\")"
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/copy-move.test.ts -t \"non-existent target board\")",
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx --workspace=server vitest run src/tests/filters.test.ts -t \"members=id1,id2\")"
     ]
   }
 }
