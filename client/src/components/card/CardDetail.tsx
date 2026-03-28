@@ -322,36 +322,38 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
             )}
           </section>
 
-          {/* Labels */}
-          {card.labels.length > 0 && (
-            <section className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
-                Labels
-              </h3>
-              <div className="flex flex-wrap gap-1.5 justify-center">
-                {card.labels.map((label) => (
-                  <LabelBadge key={label.id} color={label.color} name={label.name} size="md" />
-                ))}
-              </div>
-            </section>
-          )}
-
-          {/* Members */}
-          {card.members.length > 0 && (
-            <section className="mb-6">
-              <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-2">
-                Members
-              </h3>
-              <div className="flex flex-wrap gap-2 justify-center">
-                {card.members.map((member) => (
-                  <div key={member.id} className="flex items-center gap-1.5">
-                    <div className="w-7 h-7 rounded-full bg-blue-500 flex items-center justify-center text-sm font-medium text-white flex-shrink-0">
-                      {member.displayName.charAt(0).toUpperCase()}
-                    </div>
-                    <span className="text-sm text-gray-700">{member.displayName}</span>
+          {/* Labels & Members - centered prominently */}
+          {(card.labels.length > 0 || card.members.length > 0) && (
+            <section className="mb-8 bg-gray-50 rounded-xl p-6">
+              {card.labels.length > 0 && (
+                <div className="mb-4">
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3 text-center">
+                    Labels
+                  </h3>
+                  <div className="flex flex-wrap gap-2 justify-center">
+                    {card.labels.map((label) => (
+                      <LabelBadge key={label.id} color={label.color} name={label.name} size="md" />
+                    ))}
                   </div>
-                ))}
-              </div>
+                </div>
+              )}
+              {card.members.length > 0 && (
+                <div>
+                  <h3 className="text-sm font-semibold text-gray-700 uppercase tracking-wide mb-3 text-center">
+                    Members
+                  </h3>
+                  <div className="flex flex-wrap gap-3 justify-center">
+                    {card.members.map((member) => (
+                      <div key={member.id} className="flex flex-col items-center gap-1">
+                        <div className="w-10 h-10 rounded-full bg-blue-500 flex items-center justify-center text-base font-bold text-white">
+                          {member.displayName.charAt(0).toUpperCase()}
+                        </div>
+                        <span className="text-sm text-gray-600">{member.displayName}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
             </section>
           )}
 
