@@ -1,0 +1,43 @@
+{
+  "permissions": {
+    "allow": [
+      "WebSearch",
+      "Bash(npm install:*)",
+      "Bash(npx --workspace=packages/shared tsc --noEmit)",
+      "Bash(npx tsc:*)",
+      "Bash(npx vite:*)",
+      "Bash(\"/c/Program Files/Docker/Docker/resources/bin/docker.exe\" --version)",
+      "Bash(\"/c/Program Files/Docker/Docker/Docker Desktop.exe\" --version)",
+      "Bash(cmd.exe /c \"where docker\")",
+      "Read(//c/Program Files/**)",
+      "Read(//c/Users/brian/Desktop/Projects/Mello/$LOCALAPPDATA/**)",
+      "Read(//c/Users/brian/Desktop/Projects/Mello/$PROGRAMFILES/**)",
+      "Bash(cmd.exe /c \"where psql\")",
+      "Bash(cmd.exe /c \"where redis-cli\")",
+      "Bash(reg.exe query:*)",
+      "Bash(\"/c/Program Files/PostgreSQL/18/bin/pg_isready.exe\")",
+      "Read(//c/tools/**)",
+      "Bash(cmd.exe /c 'where redis-server')",
+      "Bash(cmd.exe /c 'where redis-cli')",
+      "Bash(cmd.exe /c 'sc query Redis')",
+      "Bash(cmd.exe /c 'sc query Memurai')",
+      "Bash(winget.exe list:*)",
+      "Bash(cmd.exe /c 'choco list --local-only')",
+      "Bash(cmd.exe /c 'scoop list')",
+      "Bash(PGPASSWORD=\"\" \"/c/Program Files/PostgreSQL/18/bin/psql.exe\" -U postgres -c \"SELECT 1\")",
+      "Bash(\"/c/Program Files/PostgreSQL/18/bin/psql.exe\" -U postgres -w -c \"SELECT 1\")",
+      "Bash(grep -v \"^$\")",
+      "Bash(npx drizzle-kit:*)",
+      "Bash(npm ls:*)",
+      "Bash(node -e \"require\\(''drizzle-orm''\\)\")",
+      "Bash(echo \"EXIT: $?\")",
+      "Bash(node -e \"const pkg = require\\(''drizzle-kit/package.json''\\); console.log\\(pkg.peerDependencies || pkg.dependencies\\)\")",
+      "Bash(for f:*)",
+      "Bash(do sed:*)",
+      "Bash(done)",
+      "Bash(DATABASE_URL=\"postgresql://mello:changeme@localhost:5432/mello\" npx drizzle-kit migrate)",
+      "Bash(PGPASSWORD='changeme' \"/c/Program Files/PostgreSQL/18/bin/psql.exe\" -U mello -h localhost -d postgres -c \"SELECT 1\" 2>&1)",
+      "Bash(PGPASSWORD='changeme' \"/c/Program Files/PostgreSQL/18/bin/psql.exe\" -U mello -h localhost -d postgres -c \"CREATE DATABASE mello OWNER mello\" 2>&1)"
+    ]
+  }
+}

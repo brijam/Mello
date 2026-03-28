@@ -1,0 +1,63 @@
+import Fastify from 'fastify';
+import cookie from '@fastify/cookie';
+import cors from '@fastify/cors';
+import authPlugin from './plugins/auth.js';
+import { config } from './config.js';
+import { AppError } from './utils/errors.js';
+
+// Route imports
+import { authRoutes } from './routes/auth.js';
+import { workspaceRoutes } from './routes/workspaces.js';
+import { boardRoutes } from './routes/boards.js';
+import { listRoutes } from './routes/lists.js';
+import { cardRoutes } from './routes/cards.js';
+
+const app = Fastify({
+  logger: {
+    transport: {
+      target: 'pino-pretty',
+      options: { translateTime: 'HH:MM:ss Z', ignore: 'pid,hostname' },
+    },
+  },
+});
+
+// Plugins
+await app.register(cors, {
+  origin: true,
+  credentials: true,
+});
+await app.register(cookie);
+await app.register(authPlugin);
+
+// Error handler
+app.setErrorHandler((error, _request, reply) => {
+  if (error instanceof AppError) {
+    return reply.status(error.statusCode).send({
+      error: { code: error.code, message: error.message },
+    });
+  }
+
+  app.log.error(error);
+  return reply.status(500).send({
+    error: { code: 'INTERNAL_ERROR', message: 'Something went wrong' },
+  });
+});
+
+// Routes
+await app.register(authRoutes, { prefix: '/api/v1/auth' });
+await app.register(workspaceRoutes, { prefix: '/api/v1/workspaces' });
+await app.register(boardRoutes, { prefix: '/api/v1' });
+await app.register(listRoutes, { prefix: '/api/v1' });
+await app.register(cardRoutes, { prefix: '/api/v1' });
+
+// Health check
+app.get('/api/health', async () => ({ status: 'ok' }));
+
+// Start
+try {
+  await app.listen({ port: config.PORT, host: '0.0.0.0' });
+  app.log.info(`Mello server running on port ${config.PORT}`);
+} catch (err) {
+  app.log.error(err);
+  process.exit(1);
+}

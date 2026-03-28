@@ -1,0 +1,3 @@
+- [Mello Feature Set](project_mello_features.md) — Confirmed feature list for self-hosted Trello replacement, with explicit exclusions
+- [Trello Export Strategy](project_trello_export.md) — Plan to use trello-full-backup + custom import script
+- [No External Network](feedback_no_external_network.md) — Runtime must never make outbound network requests; all assets bundled locally

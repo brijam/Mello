@@ -1,0 +1,206 @@
+import type { FastifyInstance } from 'fastify';
+import { eq, and, asc } from 'drizzle-orm';
+import { createCardSchema, updateCardSchema, moveCardSchema } from '@mello/shared';
+import { db } from '../db/index.js';
+import { cards } from '../db/schema/cards.js';
+import { lists } from '../db/schema/lists.js';
+import { labels, cardLabels } from '../db/schema/labels.js';
+import { cardAssignments } from '../db/schema/card-assignments.js';
+import { checklists, checklistItems } from '../db/schema/checklists.js';
+import { attachments } from '../db/schema/attachments.js';
+import { comments } from '../db/schema/comments.js';
+import { users } from '../db/schema/users.js';
+import { requireAuth } from '../middleware/auth.js';
+import { validateBody } from '../middleware/validate.js';
+import { NotFoundError } from '../utils/errors.js';
+import { getNextPosition } from '../utils/position.js';
+
+export async function cardRoutes(app: FastifyInstance) {
+  // Create card
+  app.post('/lists/:listId/cards', {
+    preHandler: [requireAuth, validateBody(createCardSchema)],
+  }, async (request, reply) => {
+    const { listId } = request.params as { listId: string };
+    const { name, description, position } = request.body as {
+      name: string; description?: string; position?: number;
+    };
+
+    // Get the list to know the board
+    const [list] = await db.select().from(lists).where(eq(lists.id, listId));
+    if (!list) throw new NotFoundError('List');
+
+    let pos = position;
+    if (pos === undefined) {
+      const existing = await db.select({ position: cards.position })
+        .from(cards)
+        .where(eq(cards.listId, listId))
+        .orderBy(asc(cards.position));
+      pos = getNextPosition(existing.at(-1)?.position);
+    }
+
+    const [card] = await db.insert(cards).values({
+      listId,
+      boardId: list.boardId,
+      name,
+      description: description ?? null,
+      position: pos,
+    }).returning();
+
+    return reply.status(201).send({ card });
+  });
+
+  // Get card detail
+  app.get('/cards/:cardId', {
+    preHandler: [requireAuth],
+  }, async (request) => {
+    const { cardId } = request.params as { cardId: string };
+
+    const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
+    if (!card) throw new NotFoundError('Card');
+
+    // Fetch related data in parallel
+    const [cardLabelsRows, memberRows, checklistRows, attachmentRows, commentCount] = await Promise.all([
+      db.select({
+        id: labels.id,
+        boardId: labels.boardId,
+        name: labels.name,
+        color: labels.color,
+        position: labels.position,
+      })
+        .from(cardLabels)
+        .innerJoin(labels, eq(cardLabels.labelId, labels.id))
+        .where(eq(cardLabels.cardId, cardId)),
+
+      db.select({
+        id: users.id,
+        username: users.username,
+        displayName: users.displayName,
+        avatarUrl: users.avatarUrl,
+      })
+        .from(cardAssignments)
+        .innerJoin(users, eq(cardAssignments.userId, users.id))
+        .where(eq(cardAssignments.cardId, cardId)),
+
+      db.select().from(checklists).where(eq(checklists.cardId, cardId)).orderBy(asc(checklists.position)),
+
+      db.select().from(attachments).where(eq(attachments.cardId, cardId)).orderBy(attachments.createdAt),
+
+      db.select({ id: comments.id }).from(comments).where(eq(comments.cardId, cardId)),
+    ]);
+
+    // Fetch checklist items for each checklist
+    const checklistsWithItems = await Promise.all(
+      checklistRows.map(async (cl) => {
+        const items = await db.select()
+          .from(checklistItems)
+          .where(eq(checklistItems.checklistId, cl.id))
+          .orderBy(asc(checklistItems.position));
+        return { ...cl, items };
+      }),
+    );
+
+    return {
+      card: {
+        ...card,
+        labels: cardLabelsRows,
+        members: memberRows,
+        checklists: checklistsWithItems,
+        attachments: attachmentRows,
+        commentCount: commentCount.length,
+      },
+    };
+  });
+
+  // Update card
+  app.patch('/cards/:cardId', {
+    preHandler: [requireAuth, validateBody(updateCardSchema)],
+  }, async (request) => {
+    const { cardId } = request.params as { cardId: string };
+    const body = request.body as Record<string, unknown>;
+
+    const [card] = await db
+      .update(cards)
+      .set({ ...body, updatedAt: new Date() })
+      .where(eq(cards.id, cardId))
+      .returning();
+
+    if (!card) throw new NotFoundError('Card');
+    return { card };
+  });
+
+  // Delete card
+  app.delete('/cards/:cardId', {
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
+    const { cardId } = request.params as { cardId: string };
+    await db.delete(cards).where(eq(cards.id, cardId));
+    return reply.status(204).send();
+  });
+
+  // Move card
+  app.post('/cards/:cardId/move', {
+    preHandler: [requireAuth, validateBody(moveCardSchema)],
+  }, async (request) => {
+    const { cardId } = request.params as { cardId: string };
+    const { listId, position, boardId } = request.body as {
+      listId: string; position: number; boardId?: string;
+    };
+
+    const updateData: Record<string, unknown> = {
+      listId,
+      position,
+      updatedAt: new Date(),
+    };
+
+    if (boardId) {
+      updateData.boardId = boardId;
+    }
+
+    const [card] = await db
+      .update(cards)
+      .set(updateData)
+      .where(eq(cards.id, cardId))
+      .returning();
+
+    if (!card) throw new NotFoundError('Card');
+    return { card };
+  });
+
+  // Card label management
+  app.post('/cards/:cardId/labels/:labelId', {
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
+    const { cardId, labelId } = request.params as { cardId: string; labelId: string };
+    await db.insert(cardLabels).values({ cardId, labelId }).onConflictDoNothing();
+    return reply.status(201).send({ ok: true });
+  });
+
+  app.delete('/cards/:cardId/labels/:labelId', {
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
+    const { cardId, labelId } = request.params as { cardId: string; labelId: string };
+    await db.delete(cardLabels).where(
+      and(eq(cardLabels.cardId, cardId), eq(cardLabels.labelId, labelId)),
+    );
+    return reply.status(204).send();
+  });
+
+  // Card member management
+  app.post('/cards/:cardId/members/:userId', {
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
+    const { cardId, userId } = request.params as { cardId: string; userId: string };
+    await db.insert(cardAssignments).values({ cardId, userId }).onConflictDoNothing();
+    return reply.status(201).send({ ok: true });
+  });
+
+  app.delete('/cards/:cardId/members/:userId', {
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
+    const { cardId, userId } = request.params as { cardId: string; userId: string };
+    await db.delete(cardAssignments).where(
+      and(eq(cardAssignments.cardId, cardId), eq(cardAssignments.userId, userId)),
+    );
+    return reply.status(204).send();
+  });
+}
