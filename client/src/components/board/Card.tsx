@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useRef } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useBoardStore } from '../../stores/boardStore.js';
@@ -19,6 +19,8 @@ interface CardProps {
 export default function Card({ card, listId }: CardProps) {
   const { deleteCard, labels } = useBoardStore();
   const [showDetail, setShowDetail] = useState(false);
+  const didDrag = useRef(false);
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
 
   const {
     attributes,
@@ -51,8 +53,28 @@ export default function Card({ card, listId }: CardProps) {
         style={style}
         {...attributes}
         {...listeners}
-        onClick={() => setShowDetail(true)}
-        className="bg-white rounded-lg shadow-sm px-3 py-2 cursor-grab hover:bg-gray-50 group"
+        onPointerDown={(e) => {
+          pointerStart.current = { x: e.clientX, y: e.clientY };
+          didDrag.current = false;
+          // Call dnd-kit's onPointerDown
+          listeners?.onPointerDown?.(e as any);
+        }}
+        onPointerMove={(e) => {
+          if (pointerStart.current) {
+            const dx = Math.abs(e.clientX - pointerStart.current.x);
+            const dy = Math.abs(e.clientY - pointerStart.current.y);
+            if (dx > 5 || dy > 5) {
+              didDrag.current = true;
+            }
+          }
+        }}
+        onPointerUp={() => {
+          if (!didDrag.current) {
+            setShowDetail(true);
+          }
+          pointerStart.current = null;
+        }}
+        className="bg-white rounded-lg shadow-sm px-3 py-2 cursor-pointer hover:bg-gray-50 group"
       >
         {cardLabels.length > 0 && (
           <div className="flex flex-wrap gap-1 mb-1.5">

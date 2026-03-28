@@ -183,9 +183,21 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
   }
 
   return (
-    <div className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] overflow-y-auto">
+    <div
+      className="bg-white rounded-lg shadow-xl max-w-3xl w-full max-h-[85vh] overflow-y-auto relative"
+      onClick={(e) => e.stopPropagation()}
+    >
+      {/* Close button */}
+      <button
+        onClick={onClose}
+        className="absolute top-4 right-4 text-gray-400 hover:text-gray-600 text-2xl leading-none z-10"
+        title="Close"
+      >
+        &times;
+      </button>
+
       {/* Header */}
-      <div className="p-6 pb-2">
+      <div className="p-6 pb-2 pr-12">
         {editingTitle ? (
           <input
             ref={titleInputRef}
