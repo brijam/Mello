@@ -1,7 +1,9 @@
+import * as path from 'node:path';
 import Fastify from 'fastify';
 import cookie from '@fastify/cookie';
 import cors from '@fastify/cors';
 import multipart from '@fastify/multipart';
+import fastifyStatic from '@fastify/static';
 import authPlugin from './plugins/auth.js';
 import socketPlugin from './plugins/socket.js';
 import { config } from './config.js';
@@ -18,6 +20,7 @@ import { commentRoutes } from './routes/comments.js';
 import { attachmentRoutes } from './routes/attachments.js';
 import { searchRoutes } from './routes/search.js';
 import { notificationRoutes } from './routes/notifications.js';
+import { activityRoutes } from './routes/activities.js';
 
 const app = Fastify({
   logger: {
@@ -34,7 +37,12 @@ await app.register(cors, {
   credentials: true,
 });
 await app.register(cookie);
-await app.register(multipart, { limits: { fileSize: 26_214_400 } }); // 25MB
+await app.register(multipart, { limits: { fileSize: 52_428_800 } }); // 50MB
+await app.register(fastifyStatic, {
+  root: path.resolve('uploads'),
+  prefix: '/uploads/',
+  decorateReply: false,
+});
 await app.register(authPlugin);
 await app.register(socketPlugin);
 
@@ -84,6 +92,7 @@ await app.register(commentRoutes, { prefix: '/api/v1' });
 await app.register(attachmentRoutes, { prefix: '/api/v1' });
 await app.register(searchRoutes, { prefix: '/api/v1' });
 await app.register(notificationRoutes, { prefix: '/api/v1' });
+await app.register(activityRoutes, { prefix: '/api/v1' });
 
 // Health check
 app.get('/api/health', async () => ({ status: 'ok' }));

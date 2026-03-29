@@ -9,6 +9,8 @@ interface AuthState {
   register: (email: string, username: string, password: string, displayName: string) => Promise<void>;
   logout: () => Promise<void>;
   fetchMe: () => Promise<void>;
+  updateAvatar: (file: File) => Promise<void>;
+  removeAvatar: () => Promise<void>;
 }
 
 export const useAuthStore = create<AuthState>((set) => ({
@@ -37,5 +39,26 @@ export const useAuthStore = create<AuthState>((set) => ({
     } catch {
       set({ user: null, loading: false });
     }
+  },
+
+  updateAvatar: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const res = await fetch('/api/v1/auth/me/avatar', {
+      method: 'PATCH',
+      credentials: 'include',
+      body: formData,
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error?.message ?? 'Failed to upload avatar');
+    }
+    const data = await res.json();
+    set({ user: data.user });
+  },
+
+  removeAvatar: async () => {
+    const data = await api.delete<{ user: User }>('/auth/me/avatar');
+    set({ user: data.user });
   },
 }));

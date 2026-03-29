@@ -44,8 +44,12 @@ function UserAvatar({ user }: { user: CommentUser }) {
   const color = colors[Math.abs(hash) % colors.length];
 
   return (
-    <div className={`w-8 h-8 rounded-full ${color} flex items-center justify-center flex-shrink-0`}>
-      <span className="text-white text-sm font-semibold">{initials}</span>
+    <div className={`w-8 h-8 rounded-full ${color} flex items-center justify-center flex-shrink-0 overflow-hidden`}>
+      {user.avatarUrl ? (
+        <img src={user.avatarUrl} alt={user.displayName} className="w-full h-full object-cover" />
+      ) : (
+        <span className="text-white text-sm font-semibold">{initials}</span>
+      )}
     </div>
   );
 }

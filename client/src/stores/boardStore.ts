@@ -21,6 +21,10 @@ interface CardSummary {
   position: number;
   labelIds: string[];
   memberIds: string[];
+  checklistItems: { total: number; checked: number } | null;
+  attachmentCount: number;
+  commentCount: number;
+  isTemplate: boolean;
   createdAt: string;
   updatedAt: string;
 }
@@ -36,6 +40,7 @@ interface BoardState {
   labels: Label[];
   members: { id: string; displayName: string; username: string; avatarUrl: string | null }[];
   loading: boolean;
+  activeFilters: BoardFilterParams;
 
   fetchBoard: (boardId: string, filters?: BoardFilterParams) => Promise<void>;
   addList: (boardId: string, name: string) => Promise<void>;
@@ -45,10 +50,29 @@ interface BoardState {
   updateCard: (cardId: string, data: { name?: string; description?: string | null }) => Promise<void>;
   moveCard: (cardId: string, listId: string, position: number) => Promise<void>;
   toggleCardLabel: (cardId: string, labelId: string, added: boolean) => void;
+  toggleCardMember: (cardId: string, userId: string, added: boolean) => void;
+  updateBoard: (boardId: string, data: { name?: string; backgroundType?: string; backgroundValue?: string }) => Promise<void>;
   deleteCard: (cardId: string) => Promise<void>;
   moveCardLocally: (cardId: string, fromListId: string, toListId: string, newIndex: number) => number;
   moveListLocally: (listId: string, newIndex: number) => number;
   clear: () => void;
+}
+
+export function cardMatchesFilters(
+  card: { labelIds: string[]; memberIds: string[] },
+  filters: BoardFilterParams
+): boolean {
+  // If label filter active, card must have ALL specified labels
+  if (filters.labels?.length) {
+    const hasAllLabels = filters.labels.every((id) => card.labelIds.includes(id));
+    if (!hasAllLabels) return false;
+  }
+  // If member filter active, card must have at least ONE specified member
+  if (filters.members?.length) {
+    const hasAnyMember = filters.members.some((id) => card.memberIds.includes(id));
+    if (!hasAnyMember) return false;
+  }
+  return true;
 }
 
 export const useBoardStore = create<BoardState>((set, get) => ({
@@ -57,6 +81,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   labels: [],
   members: [],
   loading: false,
+  activeFilters: {},
 
   fetchBoard: async (boardId, filters) => {
     const currentBoard = get().board;
@@ -69,6 +94,8 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     if (filters?.members?.length) params.set('members', filters.members.join(','));
     const qs = params.toString();
     if (qs) listsUrl += `?${qs}`;
+
+    set({ activeFilters: filters ?? {} });
 
     const [boardData, listData, memberData] = await Promise.all([
       api.get<{ board: Board; labels: Label[] }>(`/boards/${boardId}`),
@@ -95,6 +122,12 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   addCard: async (listId, name) => {
     const data = await api.post<{ card: CardSummary }>(`/lists/${listId}/cards`, { name });
     const card = { ...data.card, labelIds: data.card.labelIds ?? [], memberIds: data.card.memberIds ?? [] };
+    const { activeFilters } = get();
+    const hasFilters = (activeFilters.labels?.length ?? 0) > 0 || (activeFilters.members?.length ?? 0) > 0;
+    if (hasFilters && !cardMatchesFilters(card, activeFilters)) {
+      // Card doesn't match active filters, don't add to UI
+      return;
+    }
     set((state) => ({
       lists: state.lists.map((list) => {
         if (list.id !== listId) return list;
@@ -144,6 +177,21 @@ export const useBoardStore = create<BoardState>((set, get) => ({
             ? [...card.labelIds, labelId]
             : card.labelIds.filter((id) => id !== labelId);
           return { ...card, labelIds };
+        }),
+      })),
+    }));
+  },
+
+  toggleCardMember: (cardId, userId, added) => {
+    set((state) => ({
+      lists: state.lists.map((list) => ({
+        ...list,
+        cards: list.cards.map((card) => {
+          if (card.id !== cardId) return card;
+          const memberIds = added
+            ? [...card.memberIds, userId]
+            : card.memberIds.filter((id) => id !== userId);
+          return { ...card, memberIds };
         }),
       })),
     }));
@@ -228,6 +276,11 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     return newPosition;
   },
 
+  updateBoard: async (boardId, data) => {
+    const result = await api.patch<{ board: Board }>(`/boards/${boardId}`, data);
+    set({ board: result.board });
+  },
+
   deleteCard: async (cardId) => {
     await api.delete(`/cards/${cardId}`);
     set((state) => ({
@@ -238,5 +291,5 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     }));
   },
 
-  clear: () => set({ board: null, lists: [], labels: [], members: [], loading: false }),
+  clear: () => set({ board: null, lists: [], labels: [], members: [], loading: false, activeFilters: {} }),
 }));

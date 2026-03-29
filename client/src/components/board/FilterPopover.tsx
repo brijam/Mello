@@ -84,8 +84,12 @@ export default function FilterPopover({
                         : 'hover:bg-gray-100'
                     }`}
                   >
-                    <div className="w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center text-white text-sm font-bold flex-shrink-0">
-                      {member.displayName.charAt(0).toUpperCase()}
+                    <div className="w-8 h-8 rounded-full bg-gray-400 flex items-center justify-center text-white text-sm font-bold flex-shrink-0 overflow-hidden">
+                      {member.avatarUrl ? (
+                        <img src={member.avatarUrl} alt={member.displayName} className="w-full h-full object-cover" />
+                      ) : (
+                        member.displayName.charAt(0).toUpperCase()
+                      )}
                     </div>
                     <span className="text-sm font-medium text-gray-800 flex-1">
                       {member.displayName}

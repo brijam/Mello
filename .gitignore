@@ -5,3 +5,4 @@ dist/
 data/
 .DS_Store
 Thumbs.db
+secret.env

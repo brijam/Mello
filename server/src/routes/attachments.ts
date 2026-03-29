@@ -5,6 +5,8 @@ import { attachments } from '../db/schema/attachments.js';
 import { requireAuth } from '../middleware/auth.js';
 import { NotFoundError } from '../utils/errors.js';
 import { config } from '../config.js';
+import { logActivity } from '../utils/activity.js';
+import { cards } from '../db/schema/cards.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
@@ -51,6 +53,19 @@ export async function attachmentRoutes(app: FastifyInstance) {
       sizeBytes,
     }).returning();
 
+    try {
+      const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
+      if (card) {
+        await logActivity({
+          cardId,
+          boardId: card.boardId,
+          userId,
+          type: 'attachment_added',
+          data: { fileName: originalFilename },
+        });
+      }
+    } catch { /* fire-and-forget */ }
+
     return reply.status(201).send({ attachment });
   });
 
@@ -91,6 +106,20 @@ export async function attachmentRoutes(app: FastifyInstance) {
     }
 
     await db.delete(attachments).where(eq(attachments.id, id));
+
+    try {
+      const [card] = await db.select().from(cards).where(eq(cards.id, attachment.cardId));
+      if (card) {
+        await logActivity({
+          cardId: attachment.cardId,
+          boardId: card.boardId,
+          userId: request.userId!,
+          type: 'attachment_removed',
+          data: { fileName: attachment.filename },
+        });
+      }
+    } catch { /* fire-and-forget */ }
+
     return reply.status(204).send();
   });
 }

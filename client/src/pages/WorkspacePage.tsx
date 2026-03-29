@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useEffect, useRef, useState } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuthStore } from '../stores/authStore.js';
 import { api } from '../api/client.js';
 import type { Board, Workspace } from '@mello/shared';
@@ -8,6 +8,72 @@ import SearchBar from '../components/search/SearchBar.js';
 import NotificationBell from '../components/notifications/NotificationBell.js';
 import KeyboardShortcutsHelp from '../components/common/KeyboardShortcutsHelp.js';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts.js';
+import {
+  DndContext,
+  DragOverlay,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  closestCenter,
+  type DragStartEvent,
+  type DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  SortableContext,
+  rectSortingStrategy,
+  arrayMove,
+} from '@dnd-kit/sortable';
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+
+function SortableBoardCard({ board }: { board: Board }) {
+  const navigate = useNavigate();
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: board.id });
+
+  const didDrag = useRef(false);
+  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    backgroundColor: board.backgroundType === 'color' ? board.backgroundValue : '#0079bf',
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      onPointerDown={(e) => {
+        pointerStart.current = { x: e.clientX, y: e.clientY };
+        didDrag.current = false;
+        listeners?.onPointerDown?.(e as React.PointerEvent);
+      }}
+      onPointerMove={(e) => {
+        if (pointerStart.current) {
+          const dx = Math.abs(e.clientX - pointerStart.current.x);
+          const dy = Math.abs(e.clientY - pointerStart.current.y);
+          if (dx > 5 || dy > 5) didDrag.current = true;
+        }
+      }}
+      onPointerUp={() => {
+        if (!didDrag.current) navigate(`/b/${board.id}`);
+        pointerStart.current = null;
+      }}
+      className="rounded-lg p-4 h-24 text-white font-bold shadow hover:opacity-90 transition-opacity cursor-pointer"
+    >
+      {board.name}
+    </div>
+  );
+}
 
 export default function WorkspacePage() {
   const { workspaceId } = useParams<{ workspaceId: string }>();
@@ -18,6 +84,11 @@ export default function WorkspacePage() {
   const [newBoardName, setNewBoardName] = useState('');
   const [showCreate, setShowCreate] = useState(false);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [activeBoard, setActiveBoard] = useState<Board | null>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+  );
 
   useKeyboardShortcuts({ onShowHelp: () => setShowShortcutsHelp(true) });
 
@@ -44,6 +115,52 @@ export default function WorkspacePage() {
     setShowCreate(false);
   };
 
+  const sortedBoards = [...boards].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+
+  const handleDragStart = (event: DragStartEvent) => {
+    const board = boards.find((b) => b.id === event.active.id);
+    setActiveBoard(board ?? null);
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    setActiveBoard(null);
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const oldIndex = sortedBoards.findIndex((b) => b.id === active.id);
+    const newIndex = sortedBoards.findIndex((b) => b.id === over.id);
+    if (oldIndex === -1 || newIndex === -1) return;
+
+    const reordered = arrayMove(sortedBoards, oldIndex, newIndex);
+
+    // Calculate new position value
+    let newPosition: number;
+    if (newIndex === 0) {
+      newPosition = (reordered[1]?.position ?? 65536) / 2;
+    } else if (newIndex >= reordered.length - 1) {
+      newPosition = (reordered[reordered.length - 2]?.position ?? 0) + 65536;
+    } else {
+      const before = reordered[newIndex - 1]?.position ?? 0;
+      const after = reordered[newIndex + 1]?.position ?? before + 131072;
+      newPosition = (before + after) / 2;
+    }
+
+    // Update the moved board's position locally so sortedBoards stays correct
+    const updated = reordered.map((b) =>
+      b.id === active.id ? { ...b, position: newPosition } : b
+    );
+    setBoards(updated);
+
+    try {
+      await api.patch(`/boards/${active.id}`, { position: newPosition });
+    } catch {
+      if (workspaceId) {
+        const boardData = await api.get<{ boards: Board[] }>(`/workspaces/${workspaceId}/boards`);
+        setBoards(boardData.boards);
+      }
+    }
+  };
+
   const handleLogout = async () => {
     await logout();
     navigate('/login');
@@ -67,45 +184,58 @@ export default function WorkspacePage() {
       <main className="max-w-5xl mx-auto px-6 py-8">
         <h2 className="text-2xl font-bold text-gray-800 mb-6">{workspace?.name ?? 'Workspace'}</h2>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
-          {boards.map((board) => (
-            <Link
-              key={board.id}
-              to={`/b/${board.id}`}
-              className="rounded-lg p-4 h-24 text-white font-bold shadow hover:opacity-90 transition-opacity"
-              style={{ backgroundColor: board.backgroundType === 'color' ? board.backgroundValue : '#0079bf' }}
-            >
-              {board.name}
-            </Link>
-          ))}
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={handleDragStart}
+          onDragEnd={handleDragEnd}
+        >
+          <SortableContext items={sortedBoards.map((b) => b.id)} strategy={rectSortingStrategy}>
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
+              {sortedBoards.map((board) => (
+                <SortableBoardCard key={board.id} board={board} />
+              ))}
 
-          {showCreate ? (
-            <form onSubmit={handleCreateBoard} className="rounded-lg bg-gray-200 p-3">
-              <input
-                autoFocus
-                value={newBoardName}
-                onChange={(e) => setNewBoardName(e.target.value)}
-                placeholder="Board name"
-                className="w-full border border-gray-300 rounded px-2 py-1 mb-2 text-sm"
-              />
-              <div className="flex gap-2">
-                <button type="submit" className="bg-mello-blue text-white text-sm px-3 py-1 rounded">
-                  Create
+              {showCreate ? (
+                <form onSubmit={handleCreateBoard} className="rounded-lg bg-gray-200 p-3">
+                  <input
+                    autoFocus
+                    value={newBoardName}
+                    onChange={(e) => setNewBoardName(e.target.value)}
+                    placeholder="Board name"
+                    className="w-full border border-gray-300 rounded px-2 py-1 mb-2 text-sm"
+                  />
+                  <div className="flex gap-2">
+                    <button type="submit" className="bg-mello-blue text-white text-sm px-3 py-1 rounded">
+                      Create
+                    </button>
+                    <button type="button" onClick={() => setShowCreate(false)} className="text-sm text-gray-500">
+                      Cancel
+                    </button>
+                  </div>
+                </form>
+              ) : (
+                <button
+                  onClick={() => setShowCreate(true)}
+                  className="rounded-lg bg-gray-200 hover:bg-gray-300 p-4 h-24 text-gray-600 text-sm transition-colors"
+                >
+                  + Create new board
                 </button>
-                <button type="button" onClick={() => setShowCreate(false)} className="text-sm text-gray-500">
-                  Cancel
-                </button>
+              )}
+            </div>
+          </SortableContext>
+
+          <DragOverlay dropAnimation={null}>
+            {activeBoard && (
+              <div
+                className="rounded-lg p-4 h-24 text-white font-bold shadow-lg rotate-2 opacity-90"
+                style={{ backgroundColor: activeBoard.backgroundType === 'color' ? activeBoard.backgroundValue : '#0079bf' }}
+              >
+                {activeBoard.name}
               </div>
-            </form>
-          ) : (
-            <button
-              onClick={() => setShowCreate(true)}
-              className="rounded-lg bg-gray-200 hover:bg-gray-300 p-4 h-24 text-gray-600 text-sm transition-colors"
-            >
-              + Create new board
-            </button>
-          )}
-        </div>
+            )}
+          </DragOverlay>
+        </DndContext>
       </main>
 
       <KeyboardShortcutsHelp isOpen={showShortcutsHelp} onClose={() => setShowShortcutsHelp(false)} />

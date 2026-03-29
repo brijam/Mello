@@ -14,6 +14,7 @@ export const updateBoardSchema = z.object({
   backgroundType: z.enum(['color', 'image']).optional(),
   backgroundValue: z.string().optional(),
   isTemplate: z.boolean().optional(),
+  position: z.number().optional(),
 });
 
 export const createFromTemplateSchema = z.object({

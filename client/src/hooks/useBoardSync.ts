@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { WS_EVENTS } from '@mello/shared';
 import { useSocket } from './useSocket.js';
-import { useBoardStore } from '../stores/boardStore.js';
+import { useBoardStore, cardMatchesFilters } from '../stores/boardStore.js';
 
 export function useBoardSync(boardId: string | undefined) {
   const { socket, isConnected } = useSocket();
@@ -37,7 +37,10 @@ export function useBoardSync(boardId: string | undefined) {
     // Card events
     socket.on(WS_EVENTS.CARD_CREATED, (data: { card: any }) => {
       useBoardStore.setState((state) => {
-        const card = { ...data.card, labelIds: data.card.labelIds ?? [] };
+        const card = { ...data.card, labelIds: data.card.labelIds ?? [], memberIds: data.card.memberIds ?? [] };
+        // Check filters
+        const hasFilters = (state.activeFilters.labels?.length ?? 0) > 0 || (state.activeFilters.members?.length ?? 0) > 0;
+        if (hasFilters && !cardMatchesFilters(card, state.activeFilters)) return state;
         // Avoid duplicates
         const targetList = state.lists.find((l) => l.id === card.listId);
         if (targetList?.cards.some((c) => c.id === card.id)) return state;
@@ -50,44 +53,61 @@ export function useBoardSync(boardId: string | undefined) {
     });
 
     socket.on(WS_EVENTS.CARD_UPDATED, (data: { card: any; labelId?: string; labelAction?: 'added' | 'removed' }) => {
-      useBoardStore.setState((state) => ({
-        lists: state.lists.map((list) => ({
-          ...list,
-          cards: list.cards.map((card) => {
-            if (card.id !== data.card.id) return card;
-            let labelIds = card.labelIds;
-            if (data.labelId && data.labelAction === 'added') {
-              if (!labelIds.includes(data.labelId)) {
-                labelIds = [...labelIds, data.labelId];
+      useBoardStore.setState((state) => {
+        const hasFilters = (state.activeFilters.labels?.length ?? 0) > 0 || (state.activeFilters.members?.length ?? 0) > 0;
+
+        return {
+          lists: state.lists.map((list) => ({
+            ...list,
+            cards: list.cards.map((card) => {
+              if (card.id !== data.card.id) return card;
+              let labelIds = card.labelIds;
+              if (data.labelId && data.labelAction === 'added') {
+                if (!labelIds.includes(data.labelId)) {
+                  labelIds = [...labelIds, data.labelId];
+                }
+              } else if (data.labelId && data.labelAction === 'removed') {
+                labelIds = labelIds.filter((id) => id !== data.labelId);
               }
-            } else if (data.labelId && data.labelAction === 'removed') {
-              labelIds = labelIds.filter((id) => id !== data.labelId);
-            }
-            return { ...card, ...data.card, labelIds };
-          }),
-        })),
-      }));
+              return { ...card, ...data.card, labelIds, memberIds: data.card.memberIds ?? card.memberIds ?? [] };
+            }).filter((card) => {
+              if (!hasFilters) return true;
+              return cardMatchesFilters(card, state.activeFilters);
+            }),
+          })),
+        };
+      });
     });
 
     socket.on(WS_EVENTS.CARD_MOVED, (data: { card: any }) => {
       const movedCard = data.card;
       useBoardStore.setState((state) => {
-        // Remove from all lists, add to target list
+        const hasFilters = (state.activeFilters.labels?.length ?? 0) > 0 || (state.activeFilters.members?.length ?? 0) > 0;
+
+        // Remove from all lists
         const listsWithout = state.lists.map((l) => ({
           ...l,
           cards: l.cards.filter((c) => c.id !== movedCard.id),
         }));
+
+        // Find existing card to preserve labelIds/memberIds
+        const existingCard = state.lists
+          .flatMap((ll) => ll.cards)
+          .find((c) => c.id === movedCard.id);
+        const card = {
+          ...movedCard,
+          labelIds: existingCard?.labelIds ?? [],
+          memberIds: existingCard?.memberIds ?? [],
+        };
+
+        // Check filters before re-adding
+        if (hasFilters && !cardMatchesFilters(card, state.activeFilters)) {
+          return { lists: listsWithout };
+        }
+
         return {
           lists: listsWithout.map((l) => {
             if (l.id !== movedCard.listId) return l;
-            // Find existing card to preserve labelIds
-            const existingCard = state.lists
-              .flatMap((ll) => ll.cards)
-              .find((c) => c.id === movedCard.id);
-            const card = {
-              ...movedCard,
-              labelIds: existingCard?.labelIds ?? [],
-            };
             return { ...l, cards: [...l.cards, card] };
           }),
         };

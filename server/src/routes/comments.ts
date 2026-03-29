@@ -10,6 +10,7 @@ import { requireAuth } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { NotFoundError, ForbiddenError } from '../utils/errors.js';
 import { createNotification, parseMentions } from '../utils/notifications.js';
+import { logActivity } from '../utils/activity.js';
 
 export async function commentRoutes(app: FastifyInstance) {
   // List comments for a card
@@ -63,6 +64,19 @@ export async function commentRoutes(app: FastifyInstance) {
       })
       .from(users)
       .where(eq(users.id, request.userId!));
+
+    try {
+      const [cardForActivity] = await db.select().from(cards).where(eq(cards.id, cardId));
+      if (cardForActivity) {
+        await logActivity({
+          cardId,
+          boardId: cardForActivity.boardId,
+          userId: request.userId!,
+          type: 'comment_added',
+          data: { commentBody: body.substring(0, 100) },
+        });
+      }
+    } catch { /* fire-and-forget */ }
 
     // Process @mentions for notifications
     const mentionedUsernames = parseMentions(body);

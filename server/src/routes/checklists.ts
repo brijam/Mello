@@ -12,6 +12,8 @@ import { requireAuth } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { NotFoundError } from '../utils/errors.js';
 import { getNextPosition } from '../utils/position.js';
+import { logActivity } from '../utils/activity.js';
+import { cards } from '../db/schema/cards.js';
 
 export async function checklistRoutes(app: FastifyInstance) {
   // Create checklist
@@ -35,6 +37,19 @@ export async function checklistRoutes(app: FastifyInstance) {
       name,
       position: pos,
     }).returning();
+
+    try {
+      const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
+      if (card) {
+        await logActivity({
+          cardId,
+          boardId: card.boardId,
+          userId: request.userId!,
+          type: 'checklist_added',
+          data: { checklistName: name },
+        });
+      }
+    } catch { /* fire-and-forget */ }
 
     return reply.status(201).send({ checklist: { ...checklist, items: [] } });
   });
@@ -63,6 +78,20 @@ export async function checklistRoutes(app: FastifyInstance) {
     const { checklistId } = request.params as { checklistId: string };
     const [deleted] = await db.delete(checklists).where(eq(checklists.id, checklistId)).returning();
     if (!deleted) throw new NotFoundError('Checklist');
+
+    try {
+      const [card] = await db.select().from(cards).where(eq(cards.id, deleted.cardId));
+      if (card) {
+        await logActivity({
+          cardId: deleted.cardId,
+          boardId: card.boardId,
+          userId: request.userId!,
+          type: 'checklist_removed',
+          data: { checklistName: deleted.name },
+        });
+      }
+    } catch { /* fire-and-forget */ }
+
     return reply.status(204).send();
   });
 
@@ -109,6 +138,25 @@ export async function checklistRoutes(app: FastifyInstance) {
       .returning();
 
     if (!item) throw new NotFoundError('Checklist item');
+
+    if (typeof body.checked === 'boolean') {
+      try {
+        const [cl] = await db.select().from(checklists).where(eq(checklists.id, item.checklistId));
+        if (cl) {
+          const [card] = await db.select().from(cards).where(eq(cards.id, cl.cardId));
+          if (card) {
+            await logActivity({
+              cardId: cl.cardId,
+              boardId: card.boardId,
+              userId: request.userId!,
+              type: body.checked ? 'checklist_item_checked' : 'checklist_item_unchecked',
+              data: { checklistName: cl.name, itemName: item.name },
+            });
+          }
+        }
+      } catch { /* fire-and-forget */ }
+    }
+
     return { item };
   });
 

@@ -7,6 +7,9 @@ import { cards } from '../db/schema/cards.js';
 import { labels, cardLabels } from '../db/schema/labels.js';
 import { cardAssignments } from '../db/schema/card-assignments.js';
 import { boards, boardMembers } from '../db/schema/boards.js';
+import { checklists, checklistItems } from '../db/schema/checklists.js';
+import { attachments } from '../db/schema/attachments.js';
+import { comments } from '../db/schema/comments.js';
 import { requireAuth, requireBoardRole } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors.js';
@@ -133,11 +136,72 @@ export async function listRoutes(app: FastifyInstance) {
       membersByCard.set(row.cardId, arr);
     }
 
+    // Fetch checklist item counts per card
+    let checklistCounts: { cardId: string; total: number; checked: number }[] = [];
+    if (cardIds.length > 0) {
+      const rows = await db
+        .select({
+          cardId: checklists.cardId,
+          total: sql<number>`count(${checklistItems.id})::int`,
+          checked: sql<number>`count(case when ${checklistItems.checked} = true then 1 end)::int`,
+        })
+        .from(checklists)
+        .innerJoin(checklistItems, eq(checklistItems.checklistId, checklists.id))
+        .where(inArray(checklists.cardId, cardIds))
+        .groupBy(checklists.cardId);
+      checklistCounts = rows;
+    }
+    const checklistByCard = new Map<string, { total: number; checked: number }>();
+    for (const row of checklistCounts) {
+      checklistByCard.set(row.cardId, { total: row.total, checked: row.checked });
+    }
+
+    // Fetch attachment counts per card
+    let attachmentCounts: { cardId: string; count: number }[] = [];
+    if (cardIds.length > 0) {
+      attachmentCounts = await db
+        .select({
+          cardId: attachments.cardId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(attachments)
+        .where(inArray(attachments.cardId, cardIds))
+        .groupBy(attachments.cardId);
+    }
+    const attachmentsByCard = new Map<string, number>();
+    for (const row of attachmentCounts) {
+      attachmentsByCard.set(row.cardId, row.count);
+    }
+
+    // Fetch comment counts per card
+    let commentCounts: { cardId: string; count: number }[] = [];
+    if (cardIds.length > 0) {
+      commentCounts = await db
+        .select({
+          cardId: comments.cardId,
+          count: sql<number>`count(*)::int`,
+        })
+        .from(comments)
+        .where(inArray(comments.cardId, cardIds))
+        .groupBy(comments.cardId);
+    }
+    const commentsByCard = new Map<string, number>();
+    for (const row of commentCounts) {
+      commentsByCard.set(row.cardId, row.count);
+    }
+
     // Group cards by list
-    const cardsByList = new Map<string, (typeof boardCards[number] & { labelIds: string[]; memberIds: string[] })[]>();
+    const cardsByList = new Map<string, (typeof boardCards[number] & { labelIds: string[]; memberIds: string[]; checklistItems: { total: number; checked: number } | null; attachmentCount: number; commentCount: number })[]>();
     for (const card of boardCards) {
       const listCards = cardsByList.get(card.listId) ?? [];
-      listCards.push({ ...card, labelIds: labelsByCard.get(card.id) ?? [], memberIds: membersByCard.get(card.id) ?? [] });
+      listCards.push({
+        ...card,
+        labelIds: labelsByCard.get(card.id) ?? [],
+        memberIds: membersByCard.get(card.id) ?? [],
+        checklistItems: checklistByCard.get(card.id) ?? null,
+        attachmentCount: attachmentsByCard.get(card.id) ?? 0,
+        commentCount: commentsByCard.get(card.id) ?? 0,
+      });
       cardsByList.set(card.listId, listCards);
     }
 
@@ -204,6 +268,59 @@ export async function listRoutes(app: FastifyInstance) {
       broadcast(app.io, list.boardId, WS_EVENTS.LIST_DELETED, { listId });
     }
     return reply.status(204).send();
+  });
+
+  // Move list to another board
+  app.post('/lists/:listId/move', {
+    preHandler: [requireAuth],
+  }, async (request) => {
+    const { listId } = request.params as { listId: string };
+    const { targetBoardId, position } = request.body as { targetBoardId: string; position?: number };
+
+    const [list] = await db.select().from(lists).where(eq(lists.id, listId));
+    if (!list) throw new NotFoundError('List');
+
+    const oldBoardId = list.boardId;
+
+    // Verify target board exists
+    const [targetBoard] = await db.select().from(boards).where(eq(boards.id, targetBoardId));
+    if (!targetBoard) throw new NotFoundError('Target board');
+
+    // Calculate position in target board
+    const targetLists = await db.select({ position: lists.position })
+      .from(lists)
+      .where(eq(lists.boardId, targetBoardId))
+      .orderBy(asc(lists.position));
+
+    let newPosition: number;
+    if (position !== undefined && position > 0 && position <= targetLists.length) {
+      const idx = position - 1;
+      if (idx === 0) {
+        newPosition = targetLists.length > 0 ? targetLists[0].position / 2 : 65536;
+      } else {
+        newPosition = (targetLists[idx - 1].position + targetLists[idx].position) / 2;
+      }
+    } else {
+      newPosition = getNextPosition(targetLists.at(-1)?.position);
+    }
+
+    // Move the list and all its cards to the target board
+    await db.update(lists).set({
+      boardId: targetBoardId,
+      position: newPosition,
+      updatedAt: new Date(),
+    }).where(eq(lists.id, listId));
+
+    // Update all cards in this list to point to the new board
+    await db.update(cards).set({
+      boardId: targetBoardId,
+      updatedAt: new Date(),
+    }).where(eq(cards.listId, listId));
+
+    // Broadcast events
+    broadcast(app.io, oldBoardId, WS_EVENTS.LIST_DELETED, { listId });
+
+    return { moved: true };
   });
 
   // Move all cards in a list to another list

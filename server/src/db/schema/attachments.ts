@@ -8,6 +8,7 @@ export const attachments = pgTable('attachments', {
   userId: uuid('user_id').references(() => users.id).notNull(),
   filename: varchar('filename', { length: 255 }).notNull(),
   storagePath: text('storage_path').notNull(),
+  url: text('url'),
   mimeType: varchar('mime_type', { length: 100 }),
   sizeBytes: bigint('size_bytes', { mode: 'number' }),
   thumbnailPath: text('thumbnail_path'),

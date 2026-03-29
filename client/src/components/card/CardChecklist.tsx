@@ -27,6 +27,7 @@ export default function CardChecklist({ checklist, onUpdate }: CardChecklistProp
   const [newItemName, setNewItemName] = useState('');
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editItemValue, setEditItemValue] = useState('');
+  const [hideChecked, setHideChecked] = useState(false);
 
   const nameInputRef = useRef<HTMLInputElement>(null);
   const newItemInputRef = useRef<HTMLInputElement>(null);
@@ -47,6 +48,10 @@ export default function CardChecklist({ checklist, onUpdate }: CardChecklistProp
   const checkedCount = checklist.items.filter((i) => i.checked).length;
   const totalCount = checklist.items.length;
   const progressPercent = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
+
+  const displayedItems = hideChecked
+    ? checklist.items.filter((i) => !i.checked)
+    : checklist.items;
 
   const handleNameSave = async () => {
     const trimmed = nameValue.trim();
@@ -149,13 +154,23 @@ export default function CardChecklist({ checklist, onUpdate }: CardChecklistProp
             {checklist.name}
           </h4>
         )}
-        <button
-          onClick={handleDeleteChecklist}
-          className="text-sm text-gray-400 hover:text-red-500 px-2 py-1"
-          title="Delete checklist"
-        >
-          Delete
-        </button>
+        <div className="flex items-center gap-1">
+          {checkedCount > 0 && (
+            <button
+              onClick={() => setHideChecked((v) => !v)}
+              className="text-sm text-gray-400 hover:text-gray-600 px-2 py-1"
+            >
+              {hideChecked ? 'Show checked items' : 'Hide checked items'}
+            </button>
+          )}
+          <button
+            onClick={handleDeleteChecklist}
+            className="text-sm text-gray-400 hover:text-red-500 px-2 py-1"
+            title="Delete checklist"
+          >
+            Delete
+          </button>
+        </div>
       </div>
 
       {/* Progress bar */}
@@ -174,7 +189,7 @@ export default function CardChecklist({ checklist, onUpdate }: CardChecklistProp
 
       {/* Items */}
       <div className="space-y-1">
-        {checklist.items.map((item) => (
+        {displayedItems.map((item) => (
           <div
             key={item.id}
             className="flex items-center gap-2 group py-1 px-1 rounded hover:bg-gray-50"

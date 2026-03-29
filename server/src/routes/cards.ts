@@ -18,6 +18,7 @@ import { broadcast } from '../utils/broadcast.js';
 import { WS_EVENTS } from '@mello/shared';
 import { boards, boardMembers } from '../db/schema/boards.js';
 import { createNotification } from '../utils/notifications.js';
+import { logActivity } from '../utils/activity.js';
 
 export async function cardRoutes(app: FastifyInstance) {
   // Create card
@@ -25,8 +26,8 @@ export async function cardRoutes(app: FastifyInstance) {
     preHandler: [requireAuth, validateBody(createCardSchema)],
   }, async (request, reply) => {
     const { listId } = request.params as { listId: string };
-    const { name, description, position } = request.body as {
-      name: string; description?: string; position?: number;
+    const { name, description, position, isTemplate } = request.body as {
+      name: string; description?: string; position?: number; isTemplate?: boolean;
     };
 
     // Get the list to know the board
@@ -48,9 +49,21 @@ export async function cardRoutes(app: FastifyInstance) {
       name,
       description: description ?? null,
       position: pos,
+      ...(isTemplate !== undefined && { isTemplate }),
     }).returning();
 
     broadcast(app.io, list.boardId, WS_EVENTS.CARD_CREATED, { card: { ...card, labelIds: [] } });
+
+    try {
+      await logActivity({
+        cardId: card.id,
+        boardId: list.boardId,
+        userId: request.userId!,
+        type: 'card_created',
+        data: { cardName: card.name },
+      });
+    } catch { /* fire-and-forget */ }
+
     return reply.status(201).send({ card });
   });
 
@@ -131,6 +144,17 @@ export async function cardRoutes(app: FastifyInstance) {
 
     if (!card) throw new NotFoundError('Card');
     broadcast(app.io, card.boardId, WS_EVENTS.CARD_UPDATED, { card });
+
+    try {
+      await logActivity({
+        cardId: card.id,
+        boardId: card.boardId,
+        userId: request.userId!,
+        type: 'card_updated',
+        data: body,
+      });
+    } catch { /* fire-and-forget */ }
+
     return { card };
   });
 
@@ -140,6 +164,19 @@ export async function cardRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const { cardId } = request.params as { cardId: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
+
+    if (card) {
+      try {
+        await logActivity({
+          cardId: card.id,
+          boardId: card.boardId,
+          userId: request.userId!,
+          type: 'card_deleted',
+          data: { cardName: card.name },
+        });
+      } catch { /* fire-and-forget */ }
+    }
+
     await db.delete(cards).where(eq(cards.id, cardId));
     if (card) {
       broadcast(app.io, card.boardId, WS_EVENTS.CARD_DELETED, { cardId, listId: card.listId });
@@ -210,7 +247,125 @@ export async function cardRoutes(app: FastifyInstance) {
     }
 
     broadcast(app.io, card.boardId, WS_EVENTS.CARD_MOVED, { card });
+
+    try {
+      const [fromList] = await db.select({ name: lists.name }).from(lists).where(eq(lists.id, existingCard.listId));
+      const [toList] = await db.select({ name: lists.name }).from(lists).where(eq(lists.id, listId));
+      await logActivity({
+        cardId: card.id,
+        boardId: card.boardId,
+        userId: request.userId!,
+        type: 'card_moved',
+        data: { fromList: fromList?.name, toList: toList?.name },
+      });
+    } catch { /* fire-and-forget */ }
+
     return { card };
+  });
+
+  // Copy/duplicate card
+  app.post('/cards/:cardId/copy', {
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
+    const { cardId } = request.params as { cardId: string };
+    const body = request.body as {
+      name?: string;
+      listId?: string;
+      boardId?: string;
+      position?: number;
+      keepChecklists?: boolean;
+    };
+
+    // Fetch original card
+    const [original] = await db.select().from(cards).where(eq(cards.id, cardId));
+    if (!original) throw new NotFoundError('Card');
+
+    const targetBoardId = body.boardId || original.boardId;
+    const targetListId = body.listId || original.listId;
+
+    // Calculate position — body.position is a 1-based index, convert to float
+    const existingCards = await db.select({ position: cards.position })
+      .from(cards)
+      .where(eq(cards.listId, targetListId))
+      .orderBy(asc(cards.position));
+
+    let position: number;
+    const idx = body.position !== undefined ? body.position - 1 : existingCards.length;
+
+    if (existingCards.length === 0 || idx >= existingCards.length) {
+      position = getNextPosition(existingCards.at(-1)?.position);
+    } else if (idx <= 0) {
+      position = existingCards[0].position / 2;
+    } else {
+      position = (existingCards[idx - 1].position + existingCards[idx].position) / 2;
+    }
+
+    // Create the new card
+    const [newCard] = await db.insert(cards).values({
+      listId: targetListId,
+      boardId: targetBoardId,
+      name: body.name || original.name,
+      description: original.description,
+      position,
+      isTemplate: false,
+    }).returning();
+
+    // Copy labels (only if same board)
+    if (targetBoardId === original.boardId) {
+      const originalLabels = await db.select().from(cardLabels).where(eq(cardLabels.cardId, cardId));
+      if (originalLabels.length > 0) {
+        await db.insert(cardLabels).values(
+          originalLabels.map((cl) => ({ cardId: newCard.id, labelId: cl.labelId }))
+        );
+      }
+    }
+
+    // Copy member assignments
+    const originalAssignments = await db.select().from(cardAssignments).where(eq(cardAssignments.cardId, cardId));
+    if (originalAssignments.length > 0) {
+      await db.insert(cardAssignments).values(
+        originalAssignments.map((ca) => ({ cardId: newCard.id, userId: ca.userId }))
+      );
+    }
+
+    // Copy checklists if requested
+    if (body.keepChecklists !== false) {
+      const originalChecklists = await db.select().from(checklists).where(eq(checklists.cardId, cardId)).orderBy(asc(checklists.position));
+      for (const cl of originalChecklists) {
+        const [newChecklist] = await db.insert(checklists).values({
+          cardId: newCard.id,
+          name: cl.name,
+          position: cl.position,
+        }).returning();
+
+        const items = await db.select().from(checklistItems).where(eq(checklistItems.checklistId, cl.id)).orderBy(asc(checklistItems.position));
+        if (items.length > 0) {
+          await db.insert(checklistItems).values(
+            items.map((item) => ({
+              checklistId: newChecklist.id,
+              name: item.name,
+              checked: item.checked,
+              position: item.position,
+            }))
+          );
+        }
+      }
+    }
+
+    // Log activity
+    try {
+      await logActivity({
+        cardId: newCard.id,
+        boardId: targetBoardId,
+        userId: request.userId!,
+        type: 'card_created',
+        data: { cardName: newCard.name, copiedFrom: original.name },
+      });
+    } catch { /* fire-and-forget */ }
+
+    broadcast(app.io, targetBoardId, WS_EVENTS.CARD_CREATED, { card: { ...newCard, labelIds: [], memberIds: [] } });
+
+    return reply.status(201).send({ card: newCard });
   });
 
   // Card label management
@@ -222,6 +377,17 @@ export async function cardRoutes(app: FastifyInstance) {
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
     if (card) {
       broadcast(app.io, card.boardId, WS_EVENTS.CARD_UPDATED, { card, labelId, labelAction: 'added' });
+
+      try {
+        const [label] = await db.select().from(labels).where(eq(labels.id, labelId));
+        await logActivity({
+          cardId,
+          boardId: card.boardId,
+          userId: request.userId!,
+          type: 'label_added',
+          data: { labelName: label?.name, labelColor: label?.color },
+        });
+      } catch { /* fire-and-forget */ }
     }
     return reply.status(201).send({ ok: true });
   });
@@ -231,11 +397,22 @@ export async function cardRoutes(app: FastifyInstance) {
   }, async (request, reply) => {
     const { cardId, labelId } = request.params as { cardId: string; labelId: string };
     const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
+    const [label] = await db.select().from(labels).where(eq(labels.id, labelId));
     await db.delete(cardLabels).where(
       and(eq(cardLabels.cardId, cardId), eq(cardLabels.labelId, labelId)),
     );
     if (card) {
       broadcast(app.io, card.boardId, WS_EVENTS.CARD_UPDATED, { card, labelId, labelAction: 'removed' });
+
+      try {
+        await logActivity({
+          cardId,
+          boardId: card.boardId,
+          userId: request.userId!,
+          type: 'label_removed',
+          data: { labelName: label?.name, labelColor: label?.color },
+        });
+      } catch { /* fire-and-forget */ }
     }
     return reply.status(204).send();
   });
@@ -256,6 +433,17 @@ export async function cardRoutes(app: FastifyInstance) {
     if (!bm) throw new ForbiddenError('User is not a member of this board');
 
     await db.insert(cardAssignments).values({ cardId, userId }).onConflictDoNothing();
+
+    try {
+      const [assignedUser] = await db.select({ displayName: users.displayName }).from(users).where(eq(users.id, userId));
+      await logActivity({
+        cardId,
+        boardId: card.boardId,
+        userId: request.userId!,
+        type: 'member_added',
+        data: { memberName: assignedUser?.displayName },
+      });
+    } catch { /* fire-and-forget */ }
 
     // Create notification if assigning someone else
     if (userId !== request.userId!) {
@@ -283,6 +471,21 @@ export async function cardRoutes(app: FastifyInstance) {
     await db.delete(cardAssignments).where(
       and(eq(cardAssignments.cardId, cardId), eq(cardAssignments.userId, userId)),
     );
+
+    try {
+      const [card] = await db.select().from(cards).where(eq(cards.id, cardId));
+      const [removedUser] = await db.select({ displayName: users.displayName }).from(users).where(eq(users.id, userId));
+      if (card) {
+        await logActivity({
+          cardId,
+          boardId: card.boardId,
+          userId: request.userId!,
+          type: 'member_removed',
+          data: { memberName: removedUser?.displayName },
+        });
+      }
+    } catch { /* fire-and-forget */ }
+
     return reply.status(204).send();
   });
 }

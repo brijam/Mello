@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback, useMemo } from 'react';
+import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   DndContext,
@@ -24,25 +24,42 @@ import AddList from '../components/board/AddList.js';
 import FontSizeSelector from '../components/common/FontSizeSelector.js';
 import SearchBar from '../components/search/SearchBar.js';
 import NotificationBell from '../components/notifications/NotificationBell.js';
-import FilterBar from '../components/board/FilterBar.js';
+import FilterPopover from '../components/board/FilterPopover.js';
 import Modal from '../components/common/Modal.js';
 import CardDetail from '../components/card/CardDetail.js';
 import KeyboardShortcutsHelp from '../components/common/KeyboardShortcutsHelp.js';
+import AvatarUpload from '../components/common/AvatarUpload.js';
+import BackgroundColorPicker from '../components/board/BackgroundColorPicker.js';
 
 export default function BoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { board, lists, labels, members, loading, fetchBoard, clear, moveCard, moveCardLocally, moveListLocally, updateList } = useBoardStore();
+  const { board, lists, labels, members, loading, fetchBoard, clear, moveCard, moveCardLocally, moveListLocally, updateList, updateBoard } = useBoardStore();
   const { user, logout } = useAuthStore();
   useBoardSync(boardId);
 
   const [activeId, setActiveId] = useState<string | null>(null);
   const [activeType, setActiveType] = useState<'card' | 'list' | null>(null);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
+  const [showFilterPopover, setShowFilterPopover] = useState(false);
+  const filterRef = useRef<HTMLDivElement>(null);
 
   // Keyboard shortcuts
   useKeyboardShortcuts({ onShowHelp: () => setShowShortcutsHelp(true) });
+
+  // Close filter popover on click outside
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (filterRef.current && !filterRef.current.contains(e.target as Node)) {
+        setShowFilterPopover(false);
+      }
+    };
+    if (showFilterPopover) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showFilterPopover]);
 
   // Card detail from URL
   const cardIdFromUrl = searchParams.get('card');
@@ -321,28 +338,60 @@ export default function BoardPage() {
           <h1 className="text-lg font-bold truncate">{board.name}</h1>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
+          <BackgroundColorPicker
+            currentColor={board.backgroundValue}
+            onColorChange={(color) => updateBoard(board.id, { backgroundType: 'color', backgroundValue: color })}
+          />
           <SearchBar />
+          {/* Filter button */}
+          <div className="relative" ref={filterRef}>
+            <button
+              onClick={() => setShowFilterPopover(v => !v)}
+              className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-colors ${
+                hasFilters
+                  ? 'bg-blue-500/30 text-white'
+                  : 'bg-white/20 hover:bg-white/30 text-white'
+              }`}
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V17l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z" />
+              </svg>
+              Filter
+              {hasFilters && (
+                <span className="bg-white text-blue-600 text-xs font-bold rounded-full w-5 h-5 flex items-center justify-center">
+                  {activeLabels.length + activeMembers.length}
+                </span>
+              )}
+            </button>
+            {showFilterPopover && (
+              <FilterPopover
+                labels={labels}
+                members={members}
+                activeLabels={activeLabels}
+                activeMembers={activeMembers}
+                onToggleLabel={handleToggleLabel}
+                onToggleMember={handleToggleMember}
+                onClose={() => setShowFilterPopover(false)}
+              />
+            )}
+          </div>
+          {hasFilters && (
+            <button
+              onClick={handleClearFilters}
+              className="text-xs text-white/70 hover:text-white underline"
+            >
+              Clear filters
+            </button>
+          )}
           <FontSizeSelector />
           <NotificationBell />
+          <AvatarUpload />
           <span className="text-sm">{user?.displayName}</span>
           <button onClick={handleLogout} className="text-sm hover:underline opacity-80">
             Logout
           </button>
         </div>
       </header>
-
-      {/* Filter bar */}
-      {(hasFilters || labels.length > 0 || members.length > 0) && (
-        <FilterBar
-          labels={labels}
-          members={members}
-          activeLabels={activeLabels}
-          activeMembers={activeMembers}
-          onToggleLabel={handleToggleLabel}
-          onToggleMember={handleToggleMember}
-          onClearFilters={handleClearFilters}
-        />
-      )}
 
       <main className="flex-1 overflow-x-auto p-4">
         <DndContext
