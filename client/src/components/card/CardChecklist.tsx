@@ -1,5 +1,8 @@
 import { useState, useRef, useEffect } from 'react';
 import { api } from '../../api/client.js';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, type DragEndEvent } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface ChecklistItem {
   id: string;
@@ -20,6 +23,110 @@ interface CardChecklistProps {
   onUpdate: () => void;
 }
 
+interface SortableChecklistItemProps {
+  item: ChecklistItem;
+  editingItemId: string | null;
+  editItemValue: string;
+  editItemInputRef: React.RefObject<HTMLInputElement>;
+  onToggle: (item: ChecklistItem) => void;
+  onStartEdit: (item: ChecklistItem) => void;
+  onEditChange: (value: string) => void;
+  onEditSave: (item: ChecklistItem) => void;
+  onEditCancel: () => void;
+  onDelete: (itemId: string) => void;
+}
+
+function SortableChecklistItem({
+  item,
+  editingItemId,
+  editItemValue,
+  editItemInputRef,
+  onToggle,
+  onStartEdit,
+  onEditChange,
+  onEditSave,
+  onEditCancel,
+  onDelete,
+}: SortableChecklistItemProps) {
+  const isEditing = editingItemId === item.id;
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: item.id,
+    disabled: isEditing,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ ...style, touchAction: 'none' }}
+      {...attributes}
+      {...listeners}
+      className="flex items-center gap-2 group py-1 px-1 rounded hover:bg-gray-50 cursor-grab active:cursor-grabbing"
+    >
+      <span
+        className="text-gray-300 opacity-0 group-hover:opacity-100 transition-opacity select-none"
+      >
+        <svg width="10" height="16" viewBox="0 0 10 16" fill="currentColor">
+          <circle cx="2" cy="2" r="1.5" />
+          <circle cx="8" cy="2" r="1.5" />
+          <circle cx="2" cy="8" r="1.5" />
+          <circle cx="8" cy="8" r="1.5" />
+          <circle cx="2" cy="14" r="1.5" />
+          <circle cx="8" cy="14" r="1.5" />
+        </svg>
+      </span>
+      <input
+        type="checkbox"
+        checked={item.checked}
+        onChange={() => onToggle(item)}
+        onPointerDown={(e) => e.stopPropagation()}
+        className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
+      />
+      {isEditing ? (
+        <input
+          ref={editItemInputRef}
+          className="flex-1 text-sm border border-blue-400 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          value={editItemValue}
+          onChange={(e) => onEditChange(e.target.value)}
+          onPointerDown={(e) => e.stopPropagation()}
+          onBlur={() => onEditSave(item)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') onEditSave(item);
+            if (e.key === 'Escape') onEditCancel();
+          }}
+        />
+      ) : (
+        <span
+          className={`flex-1 text-sm cursor-pointer ${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}
+          onClick={() => onStartEdit(item)}
+        >
+          {item.name}
+        </span>
+      )}
+      <button
+        onClick={() => onDelete(item.id)}
+        onPointerDown={(e) => e.stopPropagation()}
+        className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-sm px-1"
+        title="Delete item"
+      >
+        &times;
+      </button>
+    </div>
+  );
+}
+
 export default function CardChecklist({ checklist, onUpdate }: CardChecklistProps) {
   const [editingName, setEditingName] = useState(false);
   const [nameValue, setNameValue] = useState(checklist.name);
@@ -32,6 +139,10 @@ export default function CardChecklist({ checklist, onUpdate }: CardChecklistProp
   const nameInputRef = useRef<HTMLInputElement>(null);
   const newItemInputRef = useRef<HTMLInputElement>(null);
   const editItemInputRef = useRef<HTMLInputElement>(null);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
 
   useEffect(() => {
     if (editingName) nameInputRef.current?.focus();
@@ -49,9 +160,11 @@ export default function CardChecklist({ checklist, onUpdate }: CardChecklistProp
   const totalCount = checklist.items.length;
   const progressPercent = totalCount > 0 ? Math.round((checkedCount / totalCount) * 100) : 0;
 
+  const sortedItems = [...checklist.items].sort((a, b) => a.position - b.position);
+
   const displayedItems = hideChecked
-    ? checklist.items.filter((i) => !i.checked)
-    : checklist.items;
+    ? sortedItems.filter((i) => !i.checked)
+    : sortedItems;
 
   const handleNameSave = async () => {
     const trimmed = nameValue.trim();
@@ -124,6 +237,49 @@ export default function CardChecklist({ checklist, onUpdate }: CardChecklistProp
     }
   };
 
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+    if (!over || active.id === over.id) return;
+
+    const activeId = active.id as string;
+    const overId = over.id as string;
+
+    // Work with the full sorted list (not filtered by hideChecked)
+    const fullSorted = [...checklist.items].sort((a, b) => a.position - b.position);
+
+    const oldIndex = fullSorted.findIndex((i) => i.id === activeId);
+    const overIndex = fullSorted.findIndex((i) => i.id === overId);
+    if (oldIndex === -1 || overIndex === -1) return;
+
+    // Remove the dragged item to compute the new position in the remaining array
+    const withoutActive = fullSorted.filter((i) => i.id !== activeId);
+
+    // Determine the new index in the withoutActive array
+    // If moving down (overIndex > oldIndex), insert after the over item
+    // If moving up (overIndex < oldIndex), insert before the over item
+    const overInRemaining = withoutActive.findIndex((i) => i.id === overId);
+    const newIndex = overIndex > oldIndex ? overInRemaining + 1 : overInRemaining;
+
+    let newPosition: number;
+    if (newIndex === 0) {
+      // Inserting at beginning
+      newPosition = withoutActive[0].position / 2;
+    } else if (newIndex >= withoutActive.length) {
+      // Inserting at end
+      newPosition = withoutActive[withoutActive.length - 1].position + 65536;
+    } else {
+      // Inserting in middle
+      newPosition = (withoutActive[newIndex - 1].position + withoutActive[newIndex].position) / 2;
+    }
+
+    try {
+      await api.patch(`/checklist-items/${activeId}`, { position: newPosition });
+      onUpdate();
+    } catch {
+      // ignore
+    }
+  };
+
   return (
     <div className="mb-4">
       {/* Header */}
@@ -188,51 +344,30 @@ export default function CardChecklist({ checklist, onUpdate }: CardChecklistProp
       )}
 
       {/* Items */}
-      <div className="space-y-1">
-        {displayedItems.map((item) => (
-          <div
-            key={item.id}
-            className="flex items-center gap-2 group py-1 px-1 rounded hover:bg-gray-50"
-          >
-            <input
-              type="checkbox"
-              checked={item.checked}
-              onChange={() => handleToggleItem(item)}
-              className="h-4 w-4 rounded border-gray-300 text-blue-600 cursor-pointer"
-            />
-            {editingItemId === item.id ? (
-              <input
-                ref={editItemInputRef}
-                className="flex-1 text-sm border border-blue-400 rounded px-2 py-0.5 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                value={editItemValue}
-                onChange={(e) => setEditItemValue(e.target.value)}
-                onBlur={() => handleItemNameSave(item)}
-                onKeyDown={(e) => {
-                  if (e.key === 'Enter') handleItemNameSave(item);
-                  if (e.key === 'Escape') setEditingItemId(null);
-                }}
-              />
-            ) : (
-              <span
-                className={`flex-1 text-sm cursor-pointer ${item.checked ? 'line-through text-gray-400' : 'text-gray-700'}`}
-                onClick={() => {
+      <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
+        <SortableContext items={displayedItems.map((i) => i.id)} strategy={verticalListSortingStrategy}>
+          <div className="space-y-1">
+            {displayedItems.map((item) => (
+              <SortableChecklistItem
+                key={item.id}
+                item={item}
+                editingItemId={editingItemId}
+                editItemValue={editItemValue}
+                editItemInputRef={editItemInputRef}
+                onToggle={handleToggleItem}
+                onStartEdit={(item) => {
                   setEditingItemId(item.id);
                   setEditItemValue(item.name);
                 }}
-              >
-                {item.name}
-              </span>
-            )}
-            <button
-              onClick={() => handleDeleteItem(item.id)}
-              className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition-opacity text-sm px-1"
-              title="Delete item"
-            >
-              &times;
-            </button>
+                onEditChange={setEditItemValue}
+                onEditSave={handleItemNameSave}
+                onEditCancel={() => setEditingItemId(null)}
+                onDelete={handleDeleteItem}
+              />
+            ))}
           </div>
-        ))}
-      </div>
+        </SortableContext>
+      </DndContext>
 
       {/* Add item */}
       {addingItem ? (

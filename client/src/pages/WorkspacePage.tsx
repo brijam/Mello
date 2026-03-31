@@ -21,13 +21,13 @@ import {
 import {
   SortableContext,
   rectSortingStrategy,
-  arrayMove,
 } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 
 function SortableBoardCard({ board }: { board: Board }) {
   const navigate = useNavigate();
+  const wasDragged = useRef(false);
   const {
     attributes,
     listeners,
@@ -37,8 +37,11 @@ function SortableBoardCard({ board }: { board: Board }) {
     isDragging,
   } = useSortable({ id: board.id });
 
-  const didDrag = useRef(false);
-  const pointerStart = useRef<{ x: number; y: number } | null>(null);
+  useEffect(() => {
+    if (isDragging) {
+      wasDragged.current = true;
+    }
+  }, [isDragging]);
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -52,21 +55,13 @@ function SortableBoardCard({ board }: { board: Board }) {
       ref={setNodeRef}
       style={style}
       {...attributes}
-      onPointerDown={(e) => {
-        pointerStart.current = { x: e.clientX, y: e.clientY };
-        didDrag.current = false;
-        listeners?.onPointerDown?.(e as React.PointerEvent);
-      }}
-      onPointerMove={(e) => {
-        if (pointerStart.current) {
-          const dx = Math.abs(e.clientX - pointerStart.current.x);
-          const dy = Math.abs(e.clientY - pointerStart.current.y);
-          if (dx > 5 || dy > 5) didDrag.current = true;
+      {...listeners}
+      onClick={() => {
+        if (wasDragged.current) {
+          wasDragged.current = false;
+          return;
         }
-      }}
-      onPointerUp={() => {
-        if (!didDrag.current) navigate(`/b/${board.id}`);
-        pointerStart.current = null;
+        navigate(`/b/${board.id}`);
       }}
       className="rounded-lg p-4 h-24 text-white font-bold shadow hover:opacity-90 transition-opacity cursor-pointer"
     >
@@ -131,25 +126,30 @@ export default function WorkspacePage() {
     const newIndex = sortedBoards.findIndex((b) => b.id === over.id);
     if (oldIndex === -1 || newIndex === -1) return;
 
-    const reordered = arrayMove(sortedBoards, oldIndex, newIndex);
+    // Remove active board and compute position from remaining boards
+    const without = sortedBoards.filter((b) => b.id !== active.id);
 
-    // Calculate new position value
     let newPosition: number;
-    if (newIndex === 0) {
-      newPosition = (reordered[1]?.position ?? 65536) / 2;
-    } else if (newIndex >= reordered.length - 1) {
-      newPosition = (reordered[reordered.length - 2]?.position ?? 0) + 65536;
+    if (without.length === 0) {
+      newPosition = 65536;
+    } else if (newIndex === 0) {
+      newPosition = without[0].position / 2;
+      // Handle case where first board has position 0
+      if (newPosition === 0) newPosition = without[0].position > 0 ? without[0].position / 2 : 0.5;
+    } else if (newIndex >= without.length) {
+      newPosition = without[without.length - 1].position + 65536;
     } else {
-      const before = reordered[newIndex - 1]?.position ?? 0;
-      const after = reordered[newIndex + 1]?.position ?? before + 131072;
+      const before = without[newIndex - 1].position;
+      const after = without[newIndex].position;
       newPosition = (before + after) / 2;
+      // Handle case where before and after are the same (both 0)
+      if (newPosition === before) newPosition = before + 0.5;
     }
 
-    // Update the moved board's position locally so sortedBoards stays correct
-    const updated = reordered.map((b) =>
+    // Update locally
+    setBoards(sortedBoards.map((b) =>
       b.id === active.id ? { ...b, position: newPosition } : b
-    );
-    setBoards(updated);
+    ));
 
     try {
       await api.patch(`/boards/${active.id}`, { position: newPosition });

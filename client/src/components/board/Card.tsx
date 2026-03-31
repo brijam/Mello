@@ -1,6 +1,5 @@
-import { useState, useRef, useEffect } from 'react';
-import { useSortable } from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+import { useState, useRef, useEffect, memo, useMemo } from 'react';
+import { useDraggable } from '@dnd-kit/core';
 import { useBoardStore } from '../../stores/boardStore.js';
 import LabelBadge from './LabelBadge.js';
 import Modal from '../common/Modal.js';
@@ -21,8 +20,10 @@ interface CardProps {
   listId: string;
 }
 
-export default function Card({ card, listId }: CardProps) {
-  const { deleteCard, labels, members } = useBoardStore();
+export default memo(function Card({ card, listId }: CardProps) {
+  const deleteCard = useBoardStore((s) => s.deleteCard);
+  const labels = useBoardStore((s) => s.labels);
+  const members = useBoardStore((s) => s.members);
   const [showDetail, setShowDetail] = useState(false);
   const wasDragged = useRef(false);
 
@@ -30,10 +31,8 @@ export default function Card({ card, listId }: CardProps) {
     attributes,
     listeners,
     setNodeRef,
-    transform,
-    transition,
     isDragging,
-  } = useSortable({
+  } = useDraggable({
     id: `card-${card.id}`,
     data: {
       type: 'card',
@@ -50,19 +49,25 @@ export default function Card({ card, listId }: CardProps) {
   }, [isDragging]);
 
   const style = {
-    transform: CSS.Transform.toString(transform),
-    transition,
-    opacity: isDragging ? 0.4 : 1,
+    opacity: isDragging ? 0 : 1,
+    touchAction: 'none' as const,
   };
 
-  const cardLabels = labels.filter((l) => card.labelIds?.includes(l.id));
-  const cardMembers = members.filter((m) => card.memberIds?.includes(m.id));
+  const cardLabels = useMemo(
+    () => labels.filter((l) => card.labelIds?.includes(l.id)),
+    [labels, card.labelIds],
+  );
+  const cardMembers = useMemo(
+    () => members.filter((m) => card.memberIds?.includes(m.id)),
+    [members, card.memberIds],
+  );
 
   return (
     <>
       <div
         ref={setNodeRef}
         style={style}
+        data-card-id={card.id}
         {...attributes}
         {...listeners}
         onClick={() => {
@@ -176,4 +181,4 @@ export default function Card({ card, listId }: CardProps) {
       </Modal>
     </>
   );
-}
+});

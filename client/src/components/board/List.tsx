@@ -1,6 +1,5 @@
-import { useState } from 'react';
+import { useState, useMemo, useCallback, memo } from 'react';
 import { useSortable } from '@dnd-kit/sortable';
-import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { useBoardStore } from '../../stores/boardStore.js';
 import Card from './Card.js';
@@ -22,13 +21,14 @@ interface ListProps {
   };
 }
 
-export default function List({ list }: ListProps) {
+export default memo(function List({ list }: ListProps) {
   const [isEditing, setIsEditing] = useState(false);
   const [name, setName] = useState(list.name);
   const [showListMenu, setShowListMenu] = useState(false);
   const [showMoveList, setShowMoveList] = useState(false);
   const [showMoveCards, setShowMoveCards] = useState(false);
-  const { updateList, deleteList } = useBoardStore();
+  const updateList = useBoardStore((s) => s.updateList);
+  const deleteList = useBoardStore((s) => s.deleteList);
 
   const {
     attributes,
@@ -60,12 +60,18 @@ export default function List({ list }: ListProps) {
 
   const [showTemplatePicker, setShowTemplatePicker] = useState(false);
 
-  const sortedCards = [...list.cards].sort((a, b) => a.position - b.position);
-  const cardIds = sortedCards.map((c) => `card-${c.id}`);
-
-  // Get all template cards across the entire board (not just this list)
-  const allBoardCards = useBoardStore((s) => s.lists).flatMap((l) => l.cards);
-  const boardTemplateCards = allBoardCards.filter((c) => (c as any).isTemplate);
+  const sortedCards = useMemo(
+    () => [...list.cards].sort((a, b) => a.position - b.position),
+    [list.cards],
+  );
+  // Get all template cards across the entire board (lazy — only when picker is open)
+  const allLists = useBoardStore(
+    useCallback((s: any) => showTemplatePicker ? s.lists : null, [showTemplatePicker])
+  );
+  const boardTemplateCards = useMemo(
+    () => allLists ? allLists.flatMap((l: any) => l.cards).filter((c: any) => c.isTemplate) : [],
+    [allLists],
+  );
 
   return (
     <>
@@ -78,6 +84,7 @@ export default function List({ list }: ListProps) {
         {...attributes}
         {...listeners}
         className="px-3 py-2 flex items-center justify-between cursor-grab"
+        style={{ touchAction: 'none' }}
       >
         {isEditing ? (
           <input
@@ -151,36 +158,34 @@ export default function List({ list }: ListProps) {
         </div>
       </div>
 
-      <SortableContext items={cardIds} strategy={verticalListSortingStrategy}>
-        <div className="flex-1 overflow-y-auto px-2 pb-1 space-y-1.5 min-h-[4px]">
+        <div data-list-id={list.id} className="flex-1 overflow-y-auto px-2 pb-1 space-y-1.5 min-h-[2rem]">
           {sortedCards.map((card) => (
             <Card key={card.id} card={card} listId={list.id} />
           ))}
         </div>
-      </SortableContext>
 
       <div className="px-2 pb-2">
         <div className="flex items-center gap-1">
           <div className="flex-1">
             <AddCard listId={list.id} />
           </div>
-          {boardTemplateCards.length > 0 && (
-            <div className="relative">
-              <button
-                onClick={() => setShowTemplatePicker((v) => !v)}
-                className="text-gray-400 hover:text-gray-600 p-1.5 rounded hover:bg-gray-300/50 transition-colors"
-                title="Create from template"
-              >
-                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
-                </svg>
-              </button>
-              {showTemplatePicker && (
-                <>
-                  <div className="fixed inset-0 z-40" onClick={() => setShowTemplatePicker(false)} />
-                  <div className="absolute bottom-full right-0 mb-1 w-[20rem] bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-2">
-                    <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 px-1">Create from template</p>
-                    {boardTemplateCards.map((card) => (
+          <div className="relative">
+            <button
+              onClick={() => setShowTemplatePicker((v) => !v)}
+              className="text-gray-400 hover:text-gray-600 p-1.5 rounded hover:bg-gray-300/50 transition-colors"
+              title="Create from template"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7v8a2 2 0 002 2h6M8 7V5a2 2 0 012-2h4.586a1 1 0 01.707.293l4.414 4.414a1 1 0 01.293.707V15a2 2 0 01-2 2h-2M8 7H6a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2v-2" />
+              </svg>
+            </button>
+            {showTemplatePicker && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowTemplatePicker(false)} />
+                <div className="absolute bottom-full right-0 mb-1 w-[20rem] bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-2">
+                  <p className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-2 px-1">Create from template</p>
+                  {boardTemplateCards.length > 0 ? (
+                    boardTemplateCards.map((card: any) => (
                       <div key={card.id} className="mb-1">
                         <TemplateCard
                           card={card}
@@ -188,12 +193,14 @@ export default function List({ list }: ListProps) {
                           onCreated={() => setShowTemplatePicker(false)}
                         />
                       </div>
-                    ))}
-                  </div>
-                </>
-              )}
-            </div>
-          )}
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-400 px-1 py-2">No templates yet. Open a card and use the menu to mark it as a template.</p>
+                  )}
+                </div>
+              </>
+            )}
+          </div>
         </div>
       </div>
     </div>
@@ -225,4 +232,4 @@ export default function List({ list }: ListProps) {
     )}
     </>
   );
-}
+});

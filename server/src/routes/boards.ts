@@ -196,11 +196,26 @@ export async function boardRoutes(app: FastifyInstance) {
     preHandler: [requireAuth, requireBoardRole('admin'), validateBody(updateBoardSchema)],
   }, async (request) => {
     const { boardId } = request.params as { boardId: string };
-    const body = request.body as Record<string, unknown>;
+    const body = request.body as {
+      name?: string;
+      description?: string | null;
+      backgroundType?: 'color' | 'image';
+      backgroundValue?: string;
+      isTemplate?: boolean;
+      position?: number;
+    };
+
+    const updateData: Record<string, unknown> = { updatedAt: new Date() };
+    if (body.name !== undefined) updateData.name = body.name;
+    if (body.description !== undefined) updateData.description = body.description;
+    if (body.backgroundType !== undefined) updateData.backgroundType = body.backgroundType;
+    if (body.backgroundValue !== undefined) updateData.backgroundValue = body.backgroundValue;
+    if (body.isTemplate !== undefined) updateData.isTemplate = body.isTemplate;
+    if (body.position !== undefined) updateData.position = body.position;
 
     const [board] = await db
       .update(boards)
-      .set({ ...body, updatedAt: new Date() })
+      .set(updateData)
       .where(eq(boards.id, boardId))
       .returning();
 

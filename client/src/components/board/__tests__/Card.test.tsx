@@ -3,8 +3,8 @@ import { render } from '@testing-library/react';
 import Card from '../Card.js';
 
 // Mock boardStore
-vi.mock('../../../stores/boardStore.js', () => ({
-  useBoardStore: () => ({
+vi.mock('../../../stores/boardStore.js', () => {
+  const store = {
     deleteCard: vi.fn(),
     labels: [
       { id: 'label-1', name: 'Bug', color: 'red' },
@@ -14,28 +14,21 @@ vi.mock('../../../stores/boardStore.js', () => ({
       { id: 'member-1', displayName: 'Alice' },
       { id: 'member-2', displayName: 'Bob' },
     ],
-  }),
-}));
+  };
+  return {
+    useBoardStore: (selector?: (s: typeof store) => unknown) =>
+      selector ? selector(store) : store,
+  };
+});
 
-// Mock dnd-kit sortable
-vi.mock('@dnd-kit/sortable', () => ({
-  useSortable: () => ({
+// Mock dnd-kit core (Card now uses useDraggable instead of useSortable)
+vi.mock('@dnd-kit/core', () => ({
+  useDraggable: () => ({
     attributes: {},
     listeners: {},
     setNodeRef: vi.fn(),
-    transform: null,
-    transition: null,
     isDragging: false,
   }),
-}));
-
-// Mock dnd-kit utilities
-vi.mock('@dnd-kit/utilities', () => ({
-  CSS: {
-    Transform: {
-      toString: () => null,
-    },
-  },
 }));
 
 // Mock Modal and CardDetail

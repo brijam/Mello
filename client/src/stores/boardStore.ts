@@ -209,9 +209,9 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     // Remove from source
     const fromCards = fromList.cards.filter((c) => c.id !== cardId);
 
-    // Build sorted destination cards (without the moved card)
+    // Sort defensively to ensure position calculations are correct
     const toCards = fromListId === toListId
-      ? fromCards.sort((a, b) => a.position - b.position)
+      ? [...fromCards].sort((a, b) => a.position - b.position)
       : [...toList.cards].sort((a, b) => a.position - b.position);
 
     // Calculate new position
@@ -238,7 +238,7 @@ export const useBoardStore = create<BoardState>((set, get) => ({
           return { ...list, cards: fromCards };
         }
         if (list.id === toListId) {
-          return { ...list, cards: fromListId === toListId ? newToCards : newToCards };
+          return { ...list, cards: newToCards };
         }
         return list;
       }),

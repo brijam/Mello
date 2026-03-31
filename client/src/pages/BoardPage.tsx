@@ -6,10 +6,12 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
-  closestCorners,
+  closestCenter,
+  pointerWithin,
   type DragStartEvent,
-  type DragOverEvent,
+  type DragMoveEvent,
   type DragEndEvent,
+  type CollisionDetection,
 } from '@dnd-kit/core';
 import {
   SortableContext,
@@ -35,15 +37,47 @@ export default function BoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
-  const { board, lists, labels, members, loading, fetchBoard, clear, moveCard, moveCardLocally, moveListLocally, updateList, updateBoard } = useBoardStore();
+  const board = useBoardStore((s) => s.board);
+  const lists = useBoardStore((s) => s.lists);
+  const labels = useBoardStore((s) => s.labels);
+  const members = useBoardStore((s) => s.members);
+  const loading = useBoardStore((s) => s.loading);
+  const fetchBoard = useBoardStore((s) => s.fetchBoard);
+  const clear = useBoardStore((s) => s.clear);
+  const moveCard = useBoardStore((s) => s.moveCard);
+  const moveCardLocally = useBoardStore((s) => s.moveCardLocally);
+  const moveListLocally = useBoardStore((s) => s.moveListLocally);
+  const updateList = useBoardStore((s) => s.updateList);
+  const updateBoard = useBoardStore((s) => s.updateBoard);
   const { user, logout } = useAuthStore();
   useBoardSync(boardId);
 
-  const [activeId, setActiveId] = useState<string | null>(null);
-  const [activeType, setActiveType] = useState<'card' | 'list' | null>(null);
+  // Use refs for drag state to avoid re-renders during drag
+  const activeIdRef = useRef<string | null>(null);
+  // Ref for synchronous access to drag type in collision detection (state updates are async)
+  const activeTypeRef = useRef<'card' | 'list' | null>(null);
+  // Throttle ref for handleDragOver (~60fps)
+  const lastDragOverTime = useRef(0);
+  // Minimal state just for the DragOverlay render
+  const [dragOverlay, setDragOverlay] = useState<{ id: string; type: 'card' | 'list'; name: string; cardCount?: number } | null>(null);
   const [showShortcutsHelp, setShowShortcutsHelp] = useState(false);
   const [showFilterPopover, setShowFilterPopover] = useState(false);
   const filterRef = useRef<HTMLDivElement>(null);
+
+  // Drop indicator element (DOM-based for zero re-render cost)
+  const dropIndicatorRef = useRef<HTMLDivElement | null>(null);
+
+  // Create drop indicator element once
+  useEffect(() => {
+    const el = document.createElement('div');
+    el.className = 'drop-indicator';
+    el.style.cssText = 'height: 3px; background: #3b82f6; border-radius: 3px; margin: 2px 4px; display: none; transition: opacity 0.15s;';
+    dropIndicatorRef.current = el;
+    return () => {
+      el.remove();
+      dropIndicatorRef.current = null;
+    };
+  }, []);
 
   // Keyboard shortcuts
   useKeyboardShortcuts({ onShowHelp: () => setShowShortcutsHelp(true) });
@@ -154,159 +188,205 @@ export default function BoardPage() {
     [lists],
   );
 
-  const listIds = useMemo(
-    () => sortedLists.map((l) => `list-${l.id}`),
-    [sortedLists],
-  );
-
-  // Find which list contains a given card id (raw id without prefix)
-  const findListByCardId = useCallback(
-    (cardId: string) => lists.find((l) => l.cards.some((c) => c.id === cardId)),
-    [lists],
-  );
+  const listIdsRef = useRef<string[]>([]);
+  const listIds = useMemo(() => {
+    const newIds = sortedLists.map((l) => `list-${l.id}`);
+    // Structural comparison: return same reference if content hasn't changed
+    if (
+      newIds.length === listIdsRef.current.length &&
+      newIds.every((id, i) => id === listIdsRef.current[i])
+    ) {
+      return listIdsRef.current;
+    }
+    listIdsRef.current = newIds;
+    return newIds;
+  }, [sortedLists]);
 
   const handleDragStart = useCallback((event: DragStartEvent) => {
     const { active } = event;
+    if (dropIndicatorRef.current) dropIndicatorRef.current.style.display = 'none';
     const idStr = active.id as string;
     if (idStr.startsWith('card-')) {
-      setActiveId(idStr.slice(5));
-      setActiveType('card');
+      const cardId = idStr.slice(5);
+      activeIdRef.current = cardId;
+      activeTypeRef.current = 'card';
+      // Find card name for overlay (read from store directly, no re-render)
+      const currentLists = useBoardStore.getState().lists;
+      for (const list of currentLists) {
+        const card = list.cards.find((c) => c.id === cardId);
+        if (card) {
+          setDragOverlay({ id: cardId, type: 'card', name: card.name });
+          break;
+        }
+      }
     } else if (idStr.startsWith('list-')) {
-      setActiveId(idStr.slice(5));
-      setActiveType('list');
+      const listId = idStr.slice(5);
+      activeIdRef.current = listId;
+      activeTypeRef.current = 'list';
+      const currentLists = useBoardStore.getState().lists;
+      const list = currentLists.find((l) => l.id === listId);
+      if (list) {
+        setDragOverlay({ id: listId, type: 'list', name: list.name, cardCount: list.cards.length });
+      }
     }
   }, []);
 
-  const handleDragOver = useCallback(
-    (event: DragOverEvent) => {
+  const handleDragMove = useCallback(
+    (event: DragMoveEvent) => {
+      // Throttle to ~60fps
+      const now = Date.now();
+      if (now - lastDragOverTime.current < 16) return;
+      lastDragOverTime.current = now;
+
       const { active, over } = event;
-      if (!over) return;
+      if (!over) {
+        // Hide indicator when not over any droppable
+        if (dropIndicatorRef.current) dropIndicatorRef.current.style.display = 'none';
+        return;
+      }
 
       const activeIdStr = active.id as string;
       const overIdStr = over.id as string;
 
-      // Only handle card-over-card or card-over-list (cross-container)
       if (!activeIdStr.startsWith('card-')) return;
+      if (!overIdStr.startsWith('list-')) return;
 
       const activeCardId = activeIdStr.slice(5);
+      const overListId = overIdStr.slice(5);
 
-      // Determine the over list
-      let overListId: string | null = null;
-      let overCardIndex = -1;
+      // Read current state directly from store
+      const currentLists = useBoardStore.getState().lists;
 
-      if (overIdStr.startsWith('list-')) {
-        // Dragging over an empty list or list container
-        overListId = overIdStr.slice(5);
-      } else if (overIdStr.startsWith('card-')) {
-        const overCardId = overIdStr.slice(5);
-        const overList = findListByCardId(overCardId);
-        if (overList) {
-          overListId = overList.id;
-          const sortedCards = [...overList.cards].sort((a, b) => a.position - b.position);
-          overCardIndex = sortedCards.findIndex((c) => c.id === overCardId);
+      // Find which list currently contains the active card
+      let fromListId: string | null = null;
+      for (const list of currentLists) {
+        if (list.cards.some((c) => c.id === activeCardId)) {
+          fromListId = list.id;
+          break;
+        }
+      }
+      if (!fromListId) return;
+
+      // Calculate insertion index from pointer position
+      const pointerY = (event.activatorEvent as PointerEvent).clientY + event.delta.y;
+      const listEl = document.querySelector(`[data-list-id="${overListId}"]`);
+      let insertIndex = 0;
+      if (listEl) {
+        const cardEls = listEl.querySelectorAll('[data-card-id]');
+        for (const el of cardEls) {
+          const elCardId = el.getAttribute('data-card-id');
+          if (elCardId === activeCardId) continue; // skip the dragged card
+          const rect = el.getBoundingClientRect();
+          if (pointerY > rect.top + rect.height / 2) {
+            insertIndex++;
+          } else {
+            break;
+          }
         }
       }
 
-      if (!overListId) return;
-
-      const fromList = findListByCardId(activeCardId);
-      if (!fromList) return;
-
-      // If same list, skip - onDragEnd handles final placement
-      if (fromList.id === overListId && overIdStr.startsWith('card-')) return;
-
-      // Cross-list move
-      if (fromList.id !== overListId) {
-        const newIndex = overCardIndex === -1
-          ? lists.find((l) => l.id === overListId)?.cards.length ?? 0
-          : overCardIndex;
-        moveCardLocally(activeCardId, fromList.id, overListId, newIndex);
+      // Position the drop indicator
+      if (dropIndicatorRef.current && listEl) {
+        const indicator = dropIndicatorRef.current;
+        const cardEls = Array.from(listEl.querySelectorAll('[data-card-id]'));
+        // Build list of non-dragged card elements
+        const visibleCards = cardEls.filter(el => el.getAttribute('data-card-id') !== activeCardId);
+        if (insertIndex < visibleCards.length) {
+          visibleCards[insertIndex].before(indicator);
+        } else {
+          // After the last card (but before AddCard)
+          const lastCard = cardEls[cardEls.length - 1];
+          if (lastCard) {
+            lastCard.after(indicator);
+          } else {
+            listEl.prepend(indicator);
+          }
+        }
+        indicator.style.display = 'block';
       }
+
+      // For same-list: check if position actually changed to avoid unnecessary updates
+      if (fromListId === overListId) {
+        const list = currentLists.find((l) => l.id === fromListId);
+        if (list) {
+          const currentIndex = list.cards.findIndex((c) => c.id === activeCardId);
+          if (insertIndex === currentIndex) return;
+        }
+      }
+
+      moveCardLocally(activeCardId, fromListId, overListId, insertIndex);
     },
-    [findListByCardId, lists, moveCardLocally],
+    [moveCardLocally],
   );
 
   const handleDragEnd = useCallback(
     async (event: DragEndEvent) => {
       const { active, over } = event;
 
-      setActiveId(null);
-      setActiveType(null);
+      // Hide drop indicator
+      if (dropIndicatorRef.current) dropIndicatorRef.current.style.display = 'none';
 
-      if (!over) return;
+      // Clean up drag state
+      activeIdRef.current = null;
+      activeTypeRef.current = null;
+      setDragOverlay(null);
 
       const activeIdStr = active.id as string;
-      const overIdStr = over.id as string;
 
-      // List reorder
-      if (activeIdStr.startsWith('list-') && overIdStr.startsWith('list-')) {
+      // Read current state directly from store
+      const currentLists = useBoardStore.getState().lists;
+
+      // ── List reorder ─────────────────────────────────────────────
+      if (over && activeIdStr.startsWith('list-') && (over.id as string).startsWith('list-')) {
         const activeListId = activeIdStr.slice(5);
-        const overListId = overIdStr.slice(5);
+        const overListId = (over.id as string).slice(5);
         if (activeListId === overListId) return;
 
-        const sorted = [...lists].sort((a, b) => a.position - b.position);
+        const sorted = [...currentLists].sort((a, b) => a.position - b.position);
         const overIndex = sorted.findIndex((l) => l.id === overListId);
         if (overIndex === -1) return;
 
         const newPosition = moveListLocally(activeListId, overIndex);
-        await updateList(activeListId, { position: newPosition });
+        try {
+          await updateList(activeListId, { position: newPosition });
+        } catch {
+          if (boardId) fetchBoard(boardId);
+        }
         return;
       }
 
-      // Card reorder / move
+      // ── Card drop — always persist since handleDragOver may have moved it ──
       if (activeIdStr.startsWith('card-')) {
         const activeCardId = activeIdStr.slice(5);
 
-        let targetListId: string | null = null;
-        let overCardIndex = -1;
-
-        if (overIdStr.startsWith('card-')) {
-          const overCardId = overIdStr.slice(5);
-          const overList = findListByCardId(overCardId);
-          if (overList) {
-            targetListId = overList.id;
-            const sortedCards = [...overList.cards].sort((a, b) => a.position - b.position);
-            overCardIndex = sortedCards.findIndex((c) => c.id === overCardId);
+        // Find the card's current list and position (already moved by handleDragOver)
+        for (const list of currentLists) {
+          const card = list.cards.find((c) => c.id === activeCardId);
+          if (card) {
+            try {
+              await moveCard(activeCardId, list.id, card.position);
+            } catch {
+              if (boardId) fetchBoard(boardId);
+            }
+            break;
           }
-        } else if (overIdStr.startsWith('list-')) {
-          targetListId = overIdStr.slice(5);
-          overCardIndex = lists.find((l) => l.id === targetListId)?.cards.length ?? 0;
         }
-
-        if (!targetListId) return;
-
-        const currentList = findListByCardId(activeCardId);
-        if (!currentList) return;
-
-        // Same card dropped on itself - check if position actually changed
-        if (currentList.id === targetListId && overIdStr.startsWith('card-')) {
-          const sortedCards = [...currentList.cards].sort((a, b) => a.position - b.position);
-          const currentIndex = sortedCards.findIndex((c) => c.id === activeCardId);
-          if (currentIndex === overCardIndex) return;
-        }
-
-        const newIndex = overCardIndex === -1 ? 0 : overCardIndex;
-        const newPosition = moveCardLocally(activeCardId, currentList.id, targetListId, newIndex);
-        await moveCard(activeCardId, targetListId, newPosition);
       }
     },
-    [lists, findListByCardId, moveCardLocally, moveListLocally, moveCard, updateList],
+    [boardId, moveListLocally, moveCard, updateList, fetchBoard],
   );
 
-  // Get active card/list data for overlay
-  const activeCard = useMemo(() => {
-    if (activeType !== 'card' || !activeId) return null;
-    for (const list of lists) {
-      const card = list.cards.find((c) => c.id === activeId);
-      if (card) return card;
+  const collisionDetection: CollisionDetection = useCallback((args) => {
+    const dragType = activeTypeRef.current;
+    if (dragType === 'list') {
+      return closestCenter(args);
     }
-    return null;
-  }, [activeType, activeId, lists]);
-
-  const activeList = useMemo(() => {
-    if (activeType !== 'list' || !activeId) return null;
-    return lists.find((l) => l.id === activeId) ?? null;
-  }, [activeType, activeId, lists]);
+    // For cards: use pointerWithin (containment) — much more accurate for list-level droppables
+    const within = pointerWithin(args);
+    if (within.length > 0) return within;
+    // Fallback to closestCenter if pointer isn't inside any list
+    return closestCenter(args);
+  }, []);
 
   if (loading) {
     return <div className="flex items-center justify-center min-h-screen text-gray-500">Loading board...</div>;
@@ -396,9 +476,9 @@ export default function BoardPage() {
       <main className="flex-1 overflow-x-auto p-4">
         <DndContext
           sensors={sensors}
-          collisionDetection={closestCorners}
+          collisionDetection={collisionDetection}
           onDragStart={handleDragStart}
-          onDragOver={handleDragOver}
+          onDragMove={handleDragMove}
           onDragEnd={handleDragEnd}
         >
           <SortableContext items={listIds} strategy={horizontalListSortingStrategy}>
@@ -411,16 +491,16 @@ export default function BoardPage() {
           </SortableContext>
 
           <DragOverlay dropAnimation={null}>
-            {activeType === 'card' && activeCard ? (
+            {dragOverlay?.type === 'card' ? (
               <div className="bg-white rounded-lg shadow-lg px-3 py-2 w-[27rem] rotate-2">
-                <span className="text-sm text-gray-800">{activeCard.name}</span>
+                <span className="text-sm text-gray-800">{dragOverlay.name}</span>
               </div>
             ) : null}
-            {activeType === 'list' && activeList ? (
+            {dragOverlay?.type === 'list' ? (
               <div className="bg-gray-200 rounded-xl w-[27rem] px-3 py-2 shadow-lg rotate-2 opacity-90">
-                <h3 className="font-semibold text-sm text-gray-800">{activeList.name}</h3>
+                <h3 className="font-semibold text-sm text-gray-800">{dragOverlay.name}</h3>
                 <div className="text-sm text-gray-500 mt-1">
-                  {activeList.cards.length} card{activeList.cards.length !== 1 ? 's' : ''}
+                  {dragOverlay.cardCount} card{dragOverlay.cardCount !== 1 ? 's' : ''}
                 </div>
               </div>
             ) : null}
