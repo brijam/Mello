@@ -51,6 +51,7 @@ interface BoardState {
   moveCard: (cardId: string, listId: string, position: number) => Promise<void>;
   toggleCardLabel: (cardId: string, labelId: string, added: boolean) => void;
   toggleCardMember: (cardId: string, userId: string, added: boolean) => void;
+  updateCardChecklist: (cardId: string, checklistItems: { total: number; checked: number } | null) => void;
   updateBoard: (boardId: string, data: { name?: string; backgroundType?: string; backgroundValue?: string }) => Promise<void>;
   deleteCard: (cardId: string) => Promise<void>;
   moveCardLocally: (cardId: string, fromListId: string, toListId: string, newIndex: number) => number;
@@ -193,6 +194,17 @@ export const useBoardStore = create<BoardState>((set, get) => ({
             : card.memberIds.filter((id) => id !== userId);
           return { ...card, memberIds };
         }),
+      })),
+    }));
+  },
+
+  updateCardChecklist: (cardId, checklistItems) => {
+    set((state) => ({
+      lists: state.lists.map((list) => ({
+        ...list,
+        cards: list.cards.map((card) =>
+          card.id === cardId ? { ...card, checklistItems } : card,
+        ),
       })),
     }));
   },

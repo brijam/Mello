@@ -101,8 +101,20 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
   const updateCardStore = useBoardStore((s) => s.updateCard);
   const toggleCardLabelStore = useBoardStore((s) => s.toggleCardLabel);
   const toggleCardMemberStore = useBoardStore((s) => s.toggleCardMember);
+  const updateCardChecklistStore = useBoardStore((s) => s.updateCardChecklist);
 
   const listName = card ? lists.find((l) => l.id === card.listId)?.name ?? 'Unknown list' : '';
+
+  // Sync checklist summary counts to the board store for card preview badges
+  const syncChecklistCounts = useCallback((checklists: CardDetailData['checklists']) => {
+    let total = 0;
+    let checked = 0;
+    for (const cl of checklists) {
+      total += cl.items.length;
+      checked += cl.items.filter((i) => i.checked).length;
+    }
+    updateCardChecklistStore(cardId, total > 0 ? { total, checked } : null);
+  }, [cardId, updateCardChecklistStore]);
 
   // Fetch card detail
   const fetchCard = async () => {
@@ -111,6 +123,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
       setCard(data.card);
       setTitleValue(data.card.name);
       setDescValue(data.card.description ?? '');
+      syncChecklistCounts(data.card.checklists);
       setLoading(false);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to load card');
@@ -129,6 +142,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
           setCard(data.card);
           setTitleValue(data.card.name);
           setDescValue(data.card.description ?? '');
+          syncChecklistCounts(data.card.checklists);
           setLoading(false);
         }
       })
@@ -141,7 +155,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
     return () => {
       cancelled = true;
     };
-  }, [cardId]);
+  }, [cardId, syncChecklistCounts]);
 
   // Focus title input when editing
   useEffect(() => {
