@@ -60,7 +60,13 @@ fi
 
 install -d -o "$SERVICE_USER" -g "$SERVICE_GROUP" -m 0700 "${SERVICE_HOME}/.npm"
 
-# ── 4. Repo group ownership (do NOT change owner away from root) ──────────────
+# ── 4. Pull latest code (repo is root-owned) ──────────────────────────────────
+if [[ -d "${REPO_DIR}/.git" ]]; then
+  log "Pulling latest in ${REPO_DIR}"
+  git -C "$REPO_DIR" pull --ff-only
+fi
+
+# ── 4b. Repo group ownership (do NOT change owner away from root) ─────────────
 log "Setting group ownership on ${REPO_DIR} → ${SERVICE_GROUP}"
 chgrp -R "$SERVICE_GROUP" "$REPO_DIR"
 # group rwX so service user can run npm install (writes node_modules, dist)
@@ -136,7 +142,11 @@ run_as_mello() {
 log "Installing npm workspaces"
 run_as_mello "npm install --no-audit --no-fund"
 
-log "Building shared + client + server"
+log "Building shared + client + server (clean)"
+# Wipe old dist/ output so removed source files don't linger and break ESM resolution.
+rm -rf "${REPO_DIR}/packages/shared/dist" \
+       "${REPO_DIR}/server/dist" \
+       "${REPO_DIR}/client/dist"
 run_as_mello "npm run build"
 
 log "Running database migrations"
