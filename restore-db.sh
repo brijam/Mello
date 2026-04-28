@@ -94,8 +94,11 @@ SQL
 fi
 
 echo "==> Restoring ${DUMP_FILE} into ${DB_NAME}"
-PGPASSWORD="$DB_PASSWORD" psql \
-  -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
-  -v ON_ERROR_STOP=1 -f "$DUMP_FILE"
+# Strip SET statements for parameters that don't exist on older Postgres
+# (e.g. transaction_timeout, added in PG17) so a PG17 dump can load into PG16.
+grep -vE '^SET transaction_timeout ' "$DUMP_FILE" \
+  | PGPASSWORD="$DB_PASSWORD" psql \
+      -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
+      -v ON_ERROR_STOP=1
 
 echo "Restore complete."
