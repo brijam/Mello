@@ -1,6 +1,6 @@
 import { pgTable, uuid, varchar, doublePrecision, primaryKey } from 'drizzle-orm/pg-core';
-import { boards } from './boards';
-import { cards } from './cards';
+import { boards } from './boards.js';
+import { cards } from './cards.js';
 
 export const labels = pgTable('labels', {
   id: uuid('id').defaultRandom().primaryKey(),

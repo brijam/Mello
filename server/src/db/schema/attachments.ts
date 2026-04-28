@@ -1,6 +1,6 @@
 import { pgTable, uuid, varchar, text, bigint, timestamp } from 'drizzle-orm/pg-core';
-import { cards } from './cards';
-import { users } from './users';
+import { cards } from './cards.js';
+import { users } from './users.js';
 
 export const attachments = pgTable('attachments', {
   id: uuid('id').defaultRandom().primaryKey(),

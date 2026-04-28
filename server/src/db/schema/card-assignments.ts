@@ -1,6 +1,6 @@
 import { pgTable, uuid, timestamp, primaryKey } from 'drizzle-orm/pg-core';
-import { cards } from './cards';
-import { users } from './users';
+import { cards } from './cards.js';
+import { users } from './users.js';
 
 export const cardAssignments = pgTable('card_assignments', {
   cardId: uuid('card_id').references(() => cards.id, { onDelete: 'cascade' }).notNull(),
