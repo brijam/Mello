@@ -1,89 +1,101 @@
 #!/usr/bin/env bash
-# Upload a dump produced by dump-db.sh to a remote Linode host and restore it
-# into the production Mello database. DESTRUCTIVE: drops and recreates the
-# target DB. Run from your workstation; needs SSH access as a sudo-capable user.
+# Restore a dump produced by dump-db.sh into the LOCAL Mello Postgres database.
+# Run on the server (reads /etc/mello/mello.env) or on Windows via git bash
+# (reads ./.env, same as dump-db.sh). DESTRUCTIVE: drops & recreates the DB.
 set -euo pipefail
 
 usage() {
   cat <<USAGE
-Usage: $0 <dump-file.sql> <user@host> [--yes]
+Usage: $0 <dump-file.sql> [--yes]
 
-  <dump-file.sql>   Local plain-SQL dump (output of dump-db.sh).
-  <user@host>       SSH target (must be able to sudo without prompting,
-                    or you'll be asked for the sudo password interactively).
+  <dump-file.sql>   Plain-SQL dump (output of dump-db.sh).
   --yes             Skip the confirmation prompt.
 
-This script will:
-  1. scp the dump to /tmp on the remote host.
-  2. Stop the running 'mello' Node process if found (best-effort pkill).
-  3. Drop & recreate the 'mello' database (owned by 'mello' role).
-  4. psql -f the dump as the 'mello' role (creds read from /etc/mello/mello.env).
-  5. Remove the temp file.
-
-It will NOT restart the Mello server — start it manually with start-prod.sh.
+Connection settings are read from (in priority order):
+  1. /etc/mello/mello.env  (parses DATABASE_URL — used on the prod server)
+  2. ./.env                (DB_HOST, DB_PORT, DB_NAME, DB_USER, DB_PASSWORD —
+                            same vars dump-db.sh uses on Windows/dev)
 USAGE
   exit 1
 }
 
-[[ $# -ge 2 ]] || usage
+[[ $# -ge 1 ]] || usage
 DUMP_FILE="$1"
-SSH_TARGET="$2"
-ASSUME_YES="${3:-}"
-
+ASSUME_YES="${2:-}"
 [[ -f "$DUMP_FILE" ]] || { echo "Dump file not found: $DUMP_FILE" >&2; exit 1; }
 
-REMOTE_TMP="/tmp/mello-restore-$(date +%s).sql"
+# ── Resolve connection settings ───────────────────────────────────────────────
+DB_HOST="" ; DB_PORT="" ; DB_NAME="" ; DB_USER="" ; DB_PASSWORD=""
 
-if [[ "$ASSUME_YES" != "--yes" ]]; then
-  cat <<WARN
-About to OVERWRITE the production Mello database on ${SSH_TARGET}.
-  Local dump : ${DUMP_FILE}  ($(wc -c < "$DUMP_FILE") bytes)
-  Remote DB  : mello (will be dropped and recreated)
-WARN
-  read -r -p "Type the database name 'mello' to proceed: " confirm
-  [[ "$confirm" == "mello" ]] || { echo "Aborted."; exit 1; }
+if [[ -r /etc/mello/mello.env ]]; then
+  DB_URL="$(grep -E '^DATABASE_URL=' /etc/mello/mello.env | cut -d= -f2-)"
+  re='^postgresql://([^:]+):([^@]+)@([^:/]+):?([0-9]*)/(.+)$'
+  if [[ "$DB_URL" =~ $re ]]; then
+    DB_USER="${BASH_REMATCH[1]}"
+    DB_PASSWORD="${BASH_REMATCH[2]}"
+    DB_HOST="${BASH_REMATCH[3]}"
+    DB_PORT="${BASH_REMATCH[4]:-5432}"
+    DB_NAME="${BASH_REMATCH[5]}"
+    SOURCE="/etc/mello/mello.env"
+  fi
 fi
 
-echo "==> Uploading dump to ${SSH_TARGET}:${REMOTE_TMP}"
-scp "$DUMP_FILE" "${SSH_TARGET}:${REMOTE_TMP}"
+if [[ -z "$DB_NAME" && -f .env ]]; then
+  set -a
+  # shellcheck disable=SC1091
+  . <(grep -v '^#' .env)
+  set +a
+  SOURCE="./.env"
+fi
 
-echo "==> Restoring on remote"
-ssh "$SSH_TARGET" "REMOTE_TMP='${REMOTE_TMP}' sudo -E bash -s" <<'REMOTE'
-set -euo pipefail
+DB_HOST="${DB_HOST:-localhost}"
+DB_PORT="${DB_PORT:-5432}"
+DB_NAME="${DB_NAME:-mello}"
+DB_USER="${DB_USER:-mello}"
+DB_PASSWORD="${DB_PASSWORD:-changeme}"
+SOURCE="${SOURCE:-defaults}"
 
-ENV_FILE="/etc/mello/mello.env"
-[[ -f "$ENV_FILE" ]] || { echo "Missing $ENV_FILE on remote" >&2; exit 1; }
+# pg_dump/psql ships with PostgreSQL but may not be on PATH (mirrors dump-db.sh)
+if ! command -v psql >/dev/null 2>&1; then
+  PG_BIN=$(ls -d /c/Program\ Files/PostgreSQL/*/bin 2>/dev/null | tail -1)
+  if [[ -n "$PG_BIN" ]]; then
+    export PATH="$PG_BIN:$PATH"
+  else
+    echo "Error: psql not found. Add your PostgreSQL bin directory to PATH." >&2
+    exit 1
+  fi
+fi
 
-# Parse DATABASE_URL into psql-friendly env vars.
-# Expected form: postgresql://USER:PASS@HOST:PORT/DBNAME
-DB_URL="$(grep -E '^DATABASE_URL=' "$ENV_FILE" | cut -d= -f2-)"
-[[ -n "$DB_URL" ]] || { echo "DATABASE_URL not in $ENV_FILE" >&2; exit 1; }
+# ── Confirm ───────────────────────────────────────────────────────────────────
+if [[ "$ASSUME_YES" != "--yes" ]]; then
+  cat <<WARN
+About to OVERWRITE database '${DB_NAME}' on ${DB_HOST}:${DB_PORT} as ${DB_USER}.
+  Source of creds : ${SOURCE}
+  Dump file       : ${DUMP_FILE} ($(wc -c < "$DUMP_FILE") bytes)
+WARN
+  read -r -p "Type the database name '${DB_NAME}' to proceed: " confirm
+  [[ "$confirm" == "$DB_NAME" ]] || { echo "Aborted."; exit 1; }
+fi
 
-re='^postgresql://([^:]+):([^@]+)@([^:/]+):?([0-9]*)/(.+)$'
-[[ "$DB_URL" =~ $re ]] || { echo "Could not parse DATABASE_URL" >&2; exit 1; }
-DB_USER="${BASH_REMATCH[1]}"
-DB_PASS="${BASH_REMATCH[2]}"
-DB_HOST="${BASH_REMATCH[3]}"
-DB_PORT="${BASH_REMATCH[4]:-5432}"
-DB_NAME="${BASH_REMATCH[5]}"
-
-echo "  -> stopping any running mello node process (best effort)"
-pkill -u mello -f 'node .*server/dist/index.js' || true
-sleep 1
-
-echo "  -> dropping and recreating database ${DB_NAME}"
-sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
+# ── Drop + recreate via the postgres superuser when available, otherwise via
+#    the app role connecting to the 'postgres' maintenance DB. ────────────────
+echo "==> Dropping and recreating database ${DB_NAME}"
+if command -v sudo >/dev/null 2>&1 && id postgres >/dev/null 2>&1 && [[ $EUID -eq 0 || $(id -un) == "postgres" ]] || sudo -nu postgres true 2>/dev/null; then
+  sudo -u postgres psql -v ON_ERROR_STOP=1 <<SQL
 DROP DATABASE IF EXISTS ${DB_NAME};
 CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};
 SQL
+else
+  PGPASSWORD="$DB_PASSWORD" psql -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" \
+    -d postgres -v ON_ERROR_STOP=1 <<SQL
+DROP DATABASE IF EXISTS ${DB_NAME};
+CREATE DATABASE ${DB_NAME} OWNER ${DB_USER};
+SQL
+fi
 
-echo "  -> restoring dump into ${DB_NAME}"
-PGPASSWORD="$DB_PASS" psql \
+echo "==> Restoring ${DUMP_FILE} into ${DB_NAME}"
+PGPASSWORD="$DB_PASSWORD" psql \
   -h "$DB_HOST" -p "$DB_PORT" -U "$DB_USER" -d "$DB_NAME" \
-  -v ON_ERROR_STOP=1 -f "$REMOTE_TMP"
+  -v ON_ERROR_STOP=1 -f "$DUMP_FILE"
 
-echo "  -> cleaning up ${REMOTE_TMP}"
-rm -f "$REMOTE_TMP"
-
-echo "  -> done. Start the app with: sudo /opt/mello-repo/start-prod.sh"
-REMOTE
+echo "Restore complete."
