@@ -21,18 +21,37 @@ export async function authRoutes(app: FastifyInstance) {
       email: string; username: string; password: string; displayName: string;
     };
 
-    // Check if email or username already exists
-    const [existingEmail] = await db.select({ id: users.id }).from(users).where(eq(users.email, email));
-    if (existingEmail) throw new ConflictError('Email already in use');
+    const passwordHash = await argon2.hash(password);
+
+    // Takeover path: if the email already exists, treat register as a password
+    // reset for that account. Lets superusers from a restored DB dump claim
+    // their account by re-registering with the same email.
+    const [existingEmail] = await db.select().from(users).where(eq(users.email, email));
+    if (existingEmail) {
+      const [updated] = await db
+        .update(users)
+        .set({ passwordHash, displayName, updatedAt: new Date() })
+        .where(eq(users.id, existingEmail.id))
+        .returning({
+          id: users.id,
+          email: users.email,
+          username: users.username,
+          displayName: users.displayName,
+          avatarUrl: users.avatarUrl,
+          isAdmin: users.isAdmin,
+          createdAt: users.createdAt,
+        });
+
+      await app.createSession(reply, updated.id);
+      return reply.status(200).send({ user: updated });
+    }
 
     const [existingUsername] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
     if (existingUsername) throw new ConflictError('Username already taken');
 
-    // Check if this is the first user (becomes admin)
+    // First user in an empty DB becomes admin
     const [anyUser] = await db.select({ id: users.id }).from(users).limit(1);
     const isFirstUser = !anyUser;
-
-    const passwordHash = await argon2.hash(password);
 
     const [user] = await db.insert(users).values({
       email,
@@ -50,7 +69,6 @@ export async function authRoutes(app: FastifyInstance) {
       createdAt: users.createdAt,
     });
 
-    // Create a default personal workspace
     const slug = `${username}-workspace`;
     const [workspace] = await db.insert(workspaces).values({
       name: `${displayName}'s Workspace`,

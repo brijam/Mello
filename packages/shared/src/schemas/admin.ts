@@ -23,7 +23,12 @@ export const adminSetBoardRoleSchema = z.object({
   role: z.enum(['admin', 'normal', 'observer']),
 });
 
+export const adminSetWorkspaceRoleSchema = z.object({
+  role: z.enum(['owner', 'admin', 'member']),
+});
+
 export type AdminCreateUserInput = z.infer<typeof adminCreateUserSchema>;
 export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>;
 export type AdminResetPasswordInput = z.infer<typeof adminResetPasswordSchema>;
 export type AdminSetBoardRoleInput = z.infer<typeof adminSetBoardRoleSchema>;
+export type AdminSetWorkspaceRoleInput = z.infer<typeof adminSetWorkspaceRoleSchema>;

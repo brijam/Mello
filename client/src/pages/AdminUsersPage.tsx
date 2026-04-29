@@ -13,6 +13,7 @@ interface CreateForm {
 }
 
 type BoardRole = 'admin' | 'normal' | 'observer';
+type WorkspaceRole = 'owner' | 'admin' | 'member';
 
 interface BoardPermRow {
   boardId: string;
@@ -20,6 +21,12 @@ interface BoardPermRow {
   workspaceId: string;
   workspaceName: string;
   role: BoardRole | null;
+}
+
+interface WorkspacePermRow {
+  workspaceId: string;
+  workspaceName: string;
+  role: WorkspaceRole | null;
 }
 
 const ROLE_LABEL: Record<BoardRole, string> = {
@@ -51,6 +58,9 @@ export default function AdminUsersPage() {
   const [boardsForId, setBoardsForId] = useState<string | null>(null);
   const [boardsList, setBoardsList] = useState<BoardPermRow[] | null>(null);
   const [boardsLoading, setBoardsLoading] = useState(false);
+  const [wsForId, setWsForId] = useState<string | null>(null);
+  const [wsList, setWsList] = useState<WorkspacePermRow[] | null>(null);
+  const [wsLoading, setWsLoading] = useState(false);
 
   const refresh = async () => {
     try {
@@ -142,6 +152,38 @@ export default function AdminUsersPage() {
       );
     } catch (e: any) {
       setError(e.message ?? 'Failed to update board permission');
+    }
+  };
+
+  const openWorkspaces = async (id: string) => {
+    setWsForId(id);
+    setWsList(null);
+    setWsLoading(true);
+    setError(null);
+    try {
+      const data = await api.get<{ workspaces: WorkspacePermRow[] }>(`/admin/users/${id}/workspaces`);
+      setWsList(data.workspaces);
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to load workspaces');
+    } finally {
+      setWsLoading(false);
+    }
+  };
+
+  const setWorkspaceRole = async (workspaceId: string, role: WorkspaceRole | null) => {
+    if (!wsForId) return;
+    setError(null);
+    try {
+      if (role === null) {
+        await api.delete(`/admin/users/${wsForId}/workspaces/${workspaceId}`);
+      } else {
+        await api.put(`/admin/users/${wsForId}/workspaces/${workspaceId}`, { role });
+      }
+      setWsList((prev) =>
+        prev ? prev.map((w) => (w.workspaceId === workspaceId ? { ...w, role } : w)) : prev,
+      );
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to update workspace permission');
     }
   };
 
@@ -320,6 +362,12 @@ export default function AdminUsersPage() {
                             Edit
                           </button>
                           <button
+                            onClick={() => openWorkspaces(u.id)}
+                            className="text-mello-blue hover:underline mr-3"
+                          >
+                            Workspaces
+                          </button>
+                          <button
                             onClick={() => openBoards(u.id)}
                             className="text-mello-blue hover:underline mr-3"
                           >
@@ -348,6 +396,67 @@ export default function AdminUsersPage() {
           </table>
         </div>
       </main>
+
+      {wsForId && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded p-6 w-full max-w-2xl max-h-[80vh] flex flex-col">
+            <div className="flex items-center justify-between mb-3">
+              <div>
+                <h3 className="text-lg font-semibold">Workspace Membership</h3>
+                <p className="text-sm text-gray-600">
+                  {users.find((u) => u.id === wsForId)?.email}
+                </p>
+              </div>
+              <button
+                onClick={() => { setWsForId(null); setWsList(null); }}
+                className="text-sm text-gray-500 hover:underline"
+              >
+                Close
+              </button>
+            </div>
+            <div className="overflow-auto flex-1 border border-gray-200 rounded">
+              {wsLoading && (
+                <div className="p-4 text-sm text-gray-500">Loading workspaces...</div>
+              )}
+              {!wsLoading && wsList && wsList.length === 0 && (
+                <div className="p-4 text-sm text-gray-500">No workspaces exist.</div>
+              )}
+              {!wsLoading && wsList && wsList.length > 0 && (
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50 text-gray-600 text-left sticky top-0">
+                    <tr>
+                      <th className="px-3 py-2">Workspace</th>
+                      <th className="px-3 py-2">Role</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {wsList.map((w) => (
+                      <tr key={w.workspaceId} className="border-t border-gray-100">
+                        <td className="px-3 py-2">{w.workspaceName}</td>
+                        <td className="px-3 py-2">
+                          <select
+                            value={w.role ?? ''}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setWorkspaceRole(w.workspaceId, v === '' ? null : (v as WorkspaceRole));
+                            }}
+                            className="border border-gray-300 rounded px-2 py-1"
+                          >
+                            <option value="">None</option>
+                            <option value="member">Member</option>
+                            <option value="admin">Admin</option>
+                            <option value="owner">Owner</option>
+                          </select>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {boardsForId && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">

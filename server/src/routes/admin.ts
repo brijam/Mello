@@ -6,11 +6,12 @@ import {
   adminUpdateUserSchema,
   adminResetPasswordSchema,
   adminSetBoardRoleSchema,
+  adminSetWorkspaceRoleSchema,
 } from '@mello/shared';
 import { db } from '../db/index.js';
 import { users } from '../db/schema/users.js';
 import { boards, boardMembers } from '../db/schema/boards.js';
-import { workspaces } from '../db/schema/workspaces.js';
+import { workspaces, workspaceMembers } from '../db/schema/workspaces.js';
 import { and } from 'drizzle-orm';
 import { validateBody } from '../middleware/validate.js';
 import { requireAuth, requireAdmin } from '../middleware/auth.js';
@@ -157,6 +158,59 @@ export async function adminRoutes(app: FastifyInstance) {
     await db
       .delete(boardMembers)
       .where(and(eq(boardMembers.boardId, boardId), eq(boardMembers.userId, id)));
+    return reply.status(204).send();
+  });
+
+  app.get('/users/:id/workspaces', async (request) => {
+    const { id } = request.params as { id: string };
+    const [target] = await db.select({ id: users.id }).from(users).where(eq(users.id, id));
+    if (!target) throw new NotFoundError('User');
+
+    const rows = await db
+      .select({
+        workspaceId: workspaces.id,
+        workspaceName: workspaces.name,
+        role: workspaceMembers.role,
+      })
+      .from(workspaces)
+      .leftJoin(
+        workspaceMembers,
+        and(eq(workspaceMembers.workspaceId, workspaces.id), eq(workspaceMembers.userId, id)),
+      )
+      .orderBy(workspaces.name);
+
+    return { workspaces: rows };
+  });
+
+  app.put(
+    '/users/:id/workspaces/:workspaceId',
+    { preHandler: [validateBody(adminSetWorkspaceRoleSchema)] },
+    async (request) => {
+      const { id, workspaceId } = request.params as { id: string; workspaceId: string };
+      const { role } = request.body as { role: 'owner' | 'admin' | 'member' };
+
+      const [target] = await db.select({ id: users.id }).from(users).where(eq(users.id, id));
+      if (!target) throw new NotFoundError('User');
+      const [ws] = await db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.id, workspaceId));
+      if (!ws) throw new NotFoundError('Workspace');
+
+      await db
+        .insert(workspaceMembers)
+        .values({ workspaceId, userId: id, role })
+        .onConflictDoUpdate({
+          target: [workspaceMembers.workspaceId, workspaceMembers.userId],
+          set: { role },
+        });
+
+      return { ok: true };
+    },
+  );
+
+  app.delete('/users/:id/workspaces/:workspaceId', async (request, reply) => {
+    const { id, workspaceId } = request.params as { id: string; workspaceId: string };
+    await db
+      .delete(workspaceMembers)
+      .where(and(eq(workspaceMembers.workspaceId, workspaceId), eq(workspaceMembers.userId, id)));
     return reply.status(204).send();
   });
 
