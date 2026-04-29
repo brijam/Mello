@@ -27,11 +27,13 @@ run_as_mello() {
 echo "==> npm install"
 run_as_mello "npm install --no-audit --no-fund"
 
-echo "==> Clean build (shared + server + client)"
+echo "==> Clean build (shared → server → client)"
 rm -rf "${REPO_DIR}/packages/shared/dist" \
        "${REPO_DIR}/server/dist" \
        "${REPO_DIR}/client/dist"
-run_as_mello "npm run build"
+run_as_mello "npm run build --workspace=@mello/shared"
+run_as_mello "npm run build --workspace=server"
+run_as_mello "npm run build --workspace=client"
 
 echo "==> Running database migrations"
 set -a; . "$ENV_FILE"; set +a
