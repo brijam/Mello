@@ -12,10 +12,10 @@ export default defineConfig({
   server: {
     port: 5174,
     proxy: {
-      '/api': 'http://localhost:3000',
-      '/uploads': 'http://localhost:3000',
+      '/api': 'http://localhost:2999',
+      '/uploads': 'http://localhost:2999',
       '/socket.io': {
-        target: 'http://localhost:3000',
+        target: 'http://localhost:2999',
         ws: true,
       },
     },

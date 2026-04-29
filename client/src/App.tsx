@@ -7,6 +7,7 @@ import RegisterPage from './pages/RegisterPage.js';
 import HomePage from './pages/HomePage.js';
 import WorkspacePage from './pages/WorkspacePage.js';
 import BoardPage from './pages/BoardPage.js';
+import AdminUsersPage from './pages/AdminUsersPage.js';
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { user, loading } = useAuthStore();
@@ -39,6 +40,10 @@ export default function App() {
       <Route
         path="/b/:boardId"
         element={<ProtectedRoute><BoardPage /></ProtectedRoute>}
+      />
+      <Route
+        path="/admin/users"
+        element={<ProtectedRoute><AdminUsersPage /></ProtectedRoute>}
       />
       <Route
         path="/"
