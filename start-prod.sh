@@ -13,8 +13,31 @@ UNIT_PATH="/etc/systemd/system/${UNIT_NAME}.service"
 
 [[ $EUID -eq 0 ]] || { echo "Run as root." >&2; exit 1; }
 [[ -f "$ENV_FILE" ]] || { echo "Missing ${ENV_FILE}. Run install-prod.sh first." >&2; exit 1; }
-[[ -f "${REPO_DIR}/server/dist/index.js" ]] || { echo "Server not built. Run install-prod.sh first." >&2; exit 1; }
 command -v systemctl >/dev/null || { echo "systemctl not found." >&2; exit 1; }
+
+# ── Build (clean) as the service user ─────────────────────────────────────────
+run_as_mello() {
+  sudo -u "$SERVICE_USER" \
+    HOME="$SERVICE_HOME" \
+    npm_config_cache="${SERVICE_HOME}/.npm" \
+    PATH="/usr/bin:/usr/local/bin:$PATH" \
+    bash -c "cd '${REPO_DIR}' && umask 002 && $*"
+}
+
+echo "==> npm install"
+run_as_mello "npm install --no-audit --no-fund"
+
+echo "==> Clean build (shared + server + client)"
+rm -rf "${REPO_DIR}/packages/shared/dist" \
+       "${REPO_DIR}/server/dist" \
+       "${REPO_DIR}/client/dist"
+run_as_mello "npm run build"
+
+echo "==> Running database migrations"
+set -a; . "$ENV_FILE"; set +a
+run_as_mello "cd server && DATABASE_URL='${DATABASE_URL}' npx drizzle-kit migrate"
+
+[[ -f "${REPO_DIR}/server/dist/index.js" ]] || { echo "Build did not produce server/dist/index.js" >&2; exit 1; }
 
 NEW_UNIT="$(mktemp)"
 cat > "$NEW_UNIT" <<EOF
