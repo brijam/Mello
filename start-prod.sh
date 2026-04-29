@@ -28,6 +28,14 @@ echo "==> Repo state"
 git -C "$REPO_DIR" log -1 --oneline
 git -C "$REPO_DIR" status --short || true
 
+echo "==> Repair ownership/perms so the ${SERVICE_USER} user can write"
+# git pull (as root) writes files owned by root. Re-establish the mello-group
+# ownership and group-rwX perms install-prod.sh originally set, otherwise
+# npm install (run as mello) hits EACCES on package-lock.json etc.
+chgrp -R "$SERVICE_GROUP" "$REPO_DIR"
+chmod -R g+rwX "$REPO_DIR"
+find "$REPO_DIR" -type d -exec chmod g+s {} +
+
 echo "==> Nuke build outputs, tsbuildinfo files, and EVERY node_modules/"
 rm -rf "${REPO_DIR}/packages/shared/dist" \
        "${REPO_DIR}/server/dist" \
