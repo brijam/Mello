@@ -24,22 +24,49 @@ run_as_mello() {
     bash -c "cd '${REPO_DIR}' && umask 002 && $*"
 }
 
+echo "==> Wipe stale build outputs and workspace symlinks"
+rm -rf "${REPO_DIR}/packages/shared/dist" \
+       "${REPO_DIR}/server/dist" \
+       "${REPO_DIR}/client/dist" \
+       "${REPO_DIR}/node_modules/@mello" \
+       "${REPO_DIR}/node_modules/.cache" \
+       "${REPO_DIR}/server/tsconfig.tsbuildinfo" \
+       "${REPO_DIR}/packages/shared/tsconfig.tsbuildinfo" \
+       "${REPO_DIR}/client/tsconfig.tsbuildinfo"
+
 echo "==> npm install"
 run_as_mello "npm install --no-audit --no-fund"
 
-echo "==> Clean build (shared → server → client)"
-rm -rf "${REPO_DIR}/packages/shared/dist" \
-       "${REPO_DIR}/server/dist" \
-       "${REPO_DIR}/client/dist"
+echo "==> Build @mello/shared"
 run_as_mello "npm run build --workspace=@mello/shared"
+[[ -f "${REPO_DIR}/packages/shared/dist/index.js" ]] \
+  || { echo "shared build did not produce dist/index.js" >&2; exit 1; }
+[[ -f "${REPO_DIR}/packages/shared/dist/schemas/admin.d.ts" ]] \
+  || { echo "shared build did not produce schemas/admin.d.ts" >&2; exit 1; }
+
+# Sanity check: the schemas the server is going to import must be present.
+for sym in adminCreateUserSchema adminUpdateUserSchema adminResetPasswordSchema \
+           adminSetBoardRoleSchema adminSetWorkspaceRoleSchema; do
+  if ! grep -q "$sym" "${REPO_DIR}/packages/shared/dist/schemas/admin.d.ts"; then
+    echo "ERROR: ${sym} missing from packages/shared/dist/schemas/admin.d.ts" >&2
+    echo "       Source has it? $(grep -c "$sym" "${REPO_DIR}/packages/shared/src/schemas/admin.ts" || true) match(es) in src/schemas/admin.ts" >&2
+    exit 1
+  fi
+done
+
+echo "==> Build server"
 run_as_mello "npm run build --workspace=server"
+[[ -f "${REPO_DIR}/server/dist/index.js" ]] \
+  || { echo "server build did not produce dist/index.js" >&2; exit 1; }
+
+echo "==> Build client"
 run_as_mello "npm run build --workspace=client"
+[[ -f "${REPO_DIR}/client/dist/index.html" ]] \
+  || { echo "client build did not produce dist/index.html" >&2; exit 1; }
 
 echo "==> Running database migrations"
 set -a; . "$ENV_FILE"; set +a
 run_as_mello "cd server && DATABASE_URL='${DATABASE_URL}' npx drizzle-kit migrate"
-
-[[ -f "${REPO_DIR}/server/dist/index.js" ]] || { echo "Build did not produce server/dist/index.js" >&2; exit 1; }
 
 NEW_UNIT="$(mktemp)"
 cat > "$NEW_UNIT" <<EOF
