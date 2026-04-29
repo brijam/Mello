@@ -91,13 +91,13 @@ if ! grep -q adminSetWorkspaceRoleSchema "${RESOLVED_ADMIN}"; then
   exit 1
 fi
 
-echo "==> Build server"
-run_as_mello "npm run build --workspace=server"
+echo "==> Build @mello/server"
+run_as_mello "npm run build --workspace=@mello/server"
 [[ -f "${REPO_DIR}/server/dist/index.js" ]] \
   || { echo "server build did not produce dist/index.js" >&2; exit 1; }
 
-echo "==> Build client"
-run_as_mello "npm run build --workspace=client"
+echo "==> Build @mello/client"
+run_as_mello "npm run build --workspace=@mello/client"
 [[ -f "${REPO_DIR}/client/dist/index.html" ]] \
   || { echo "client build did not produce dist/index.html" >&2; exit 1; }
 
