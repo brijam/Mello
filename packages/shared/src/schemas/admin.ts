@@ -27,8 +27,13 @@ export const adminSetWorkspaceRoleSchema = z.object({
   role: z.enum(['owner', 'admin', 'member']),
 });
 
+export const adminSetDefaultWorkspaceSchema = z.object({
+  workspaceId: z.string().uuid().nullable(),
+});
+
 export type AdminCreateUserInput = z.infer<typeof adminCreateUserSchema>;
 export type AdminUpdateUserInput = z.infer<typeof adminUpdateUserSchema>;
 export type AdminResetPasswordInput = z.infer<typeof adminResetPasswordSchema>;
 export type AdminSetBoardRoleInput = z.infer<typeof adminSetBoardRoleSchema>;
 export type AdminSetWorkspaceRoleInput = z.infer<typeof adminSetWorkspaceRoleSchema>;
+export type AdminSetDefaultWorkspaceInput = z.infer<typeof adminSetDefaultWorkspaceSchema>;

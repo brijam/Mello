@@ -61,6 +61,7 @@ export default function AdminUsersPage() {
   const [wsForId, setWsForId] = useState<string | null>(null);
   const [wsList, setWsList] = useState<WorkspacePermRow[] | null>(null);
   const [wsLoading, setWsLoading] = useState(false);
+  const [wsDefaultId, setWsDefaultId] = useState<string | null>(null);
 
   const refresh = async () => {
     try {
@@ -154,6 +155,7 @@ export default function AdminUsersPage() {
   const openWorkspaces = async (id: string) => {
     setWsForId(id);
     setWsList(null);
+    setWsDefaultId(users.find((u) => u.id === id)?.defaultWorkspaceId ?? null);
     setWsLoading(true);
     setError(null);
     try {
@@ -163,6 +165,18 @@ export default function AdminUsersPage() {
       setError(e.message ?? 'Failed to load workspaces');
     } finally {
       setWsLoading(false);
+    }
+  };
+
+  const setDefaultWorkspace = async (workspaceId: string | null) => {
+    if (!wsForId) return;
+    setError(null);
+    try {
+      await api.put(`/admin/users/${wsForId}/default-workspace`, { workspaceId });
+      setWsDefaultId(workspaceId);
+      await refresh();
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to update default workspace');
     }
   };
 
@@ -417,12 +431,13 @@ export default function AdminUsersPage() {
               {!wsLoading && wsList && wsList.length === 0 && (
                 <div className="p-4 text-sm text-gray-500">No workspaces exist.</div>
               )}
-              {!wsLoading && wsList && wsList.length > 0 && (
+              {!wsLoading && wsList && wsList.length > 0 && (<>
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50 text-gray-600 text-left sticky top-0">
                     <tr>
                       <th className="px-3 py-2">Workspace</th>
                       <th className="px-3 py-2">Role</th>
+                      <th className="px-3 py-2">Default</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -444,11 +459,29 @@ export default function AdminUsersPage() {
                             <option value="owner">Owner</option>
                           </select>
                         </td>
+                        <td className="px-3 py-2">
+                          <input
+                            type="radio"
+                            name="default-workspace"
+                            checked={wsDefaultId === w.workspaceId}
+                            onChange={() => setDefaultWorkspace(w.workspaceId)}
+                          />
+                        </td>
                       </tr>
                     ))}
                   </tbody>
                 </table>
-              )}
+                {wsDefaultId !== null && (
+                  <div className="px-3 py-2 text-right">
+                    <button
+                      onClick={() => setDefaultWorkspace(null)}
+                      className="text-xs text-gray-500 hover:underline"
+                    >
+                      Clear default
+                    </button>
+                  </div>
+                )}
+              </>)}
             </div>
           </div>
         </div>

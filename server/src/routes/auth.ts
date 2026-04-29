@@ -44,6 +44,7 @@ export async function authRoutes(app: FastifyInstance) {
           displayName: users.displayName,
           avatarUrl: users.avatarUrl,
           isAdmin: users.isAdmin,
+      defaultWorkspaceId: users.defaultWorkspaceId,
           createdAt: users.createdAt,
         });
 
@@ -67,6 +68,7 @@ export async function authRoutes(app: FastifyInstance) {
       displayName: users.displayName,
       avatarUrl: users.avatarUrl,
       isAdmin: users.isAdmin,
+      defaultWorkspaceId: users.defaultWorkspaceId,
       createdAt: users.createdAt,
     });
 
@@ -116,6 +118,7 @@ export async function authRoutes(app: FastifyInstance) {
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
         isAdmin: users.isAdmin,
+        defaultWorkspaceId: users.defaultWorkspaceId,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
       })
@@ -184,6 +187,7 @@ export async function authRoutes(app: FastifyInstance) {
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
         isAdmin: users.isAdmin,
+      defaultWorkspaceId: users.defaultWorkspaceId,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
       });
@@ -215,6 +219,7 @@ export async function authRoutes(app: FastifyInstance) {
         displayName: users.displayName,
         avatarUrl: users.avatarUrl,
         isAdmin: users.isAdmin,
+      defaultWorkspaceId: users.defaultWorkspaceId,
         createdAt: users.createdAt,
         updatedAt: users.updatedAt,
       });

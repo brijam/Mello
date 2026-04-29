@@ -5,6 +5,7 @@ export interface User {
   displayName: string;
   avatarUrl: string | null;
   isAdmin: boolean;
+  defaultWorkspaceId: string | null;
   createdAt: string;
   updatedAt: string;
 }

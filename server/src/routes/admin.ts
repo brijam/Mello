@@ -7,6 +7,7 @@ import {
   adminResetPasswordSchema,
   adminSetBoardRoleSchema,
   adminSetWorkspaceRoleSchema,
+  adminSetDefaultWorkspaceSchema,
 } from '@mello/shared';
 import { db } from '../db/index.js';
 import { users } from '../db/schema/users.js';
@@ -24,6 +25,7 @@ const userColumns = {
   displayName: users.displayName,
   avatarUrl: users.avatarUrl,
   isAdmin: users.isAdmin,
+  defaultWorkspaceId: users.defaultWorkspaceId,
   createdAt: users.createdAt,
   updatedAt: users.updatedAt,
 };
@@ -202,6 +204,26 @@ export async function adminRoutes(app: FastifyInstance) {
           set: { role },
         });
 
+      return { ok: true };
+    },
+  );
+
+  app.put(
+    '/users/:id/default-workspace',
+    { preHandler: [validateBody(adminSetDefaultWorkspaceSchema)] },
+    async (request) => {
+      const { id } = request.params as { id: string };
+      const { workspaceId } = request.body as { workspaceId: string | null };
+
+      const [target] = await db.select({ id: users.id }).from(users).where(eq(users.id, id));
+      if (!target) throw new NotFoundError('User');
+
+      if (workspaceId) {
+        const [ws] = await db.select({ id: workspaces.id }).from(workspaces).where(eq(workspaces.id, workspaceId));
+        if (!ws) throw new NotFoundError('Workspace');
+      }
+
+      await db.update(users).set({ defaultWorkspaceId: workspaceId, updatedAt: new Date() }).where(eq(users.id, id));
       return { ok: true };
     },
   );
