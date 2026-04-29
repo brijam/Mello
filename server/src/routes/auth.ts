@@ -25,12 +25,17 @@ export async function authRoutes(app: FastifyInstance) {
 
     // Takeover path: if the email already exists, treat register as a password
     // reset for that account. Lets superusers from a restored DB dump claim
-    // their account by re-registering with the same email.
+    // their account by re-registering with the same email. Admin status on
+    // the existing row is preserved.
     const [existingEmail] = await db.select().from(users).where(eq(users.email, email));
     if (existingEmail) {
       const [updated] = await db
         .update(users)
-        .set({ passwordHash, displayName, updatedAt: new Date() })
+        .set({
+          passwordHash,
+          displayName,
+          updatedAt: new Date(),
+        })
         .where(eq(users.id, existingEmail.id))
         .returning({
           id: users.id,
@@ -49,16 +54,12 @@ export async function authRoutes(app: FastifyInstance) {
     const [existingUsername] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
     if (existingUsername) throw new ConflictError('Username already taken');
 
-    // First user in an empty DB becomes admin
-    const [anyUser] = await db.select({ id: users.id }).from(users).limit(1);
-    const isFirstUser = !anyUser;
-
     const [user] = await db.insert(users).values({
       email,
       username,
       displayName,
       passwordHash,
-      isAdmin: isFirstUser,
+      isAdmin: false,
     }).returning({
       id: users.id,
       email: users.email,

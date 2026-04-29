@@ -4,6 +4,7 @@ import { db } from '../db/index.js';
 import { boardMembers } from '../db/schema/boards.js';
 import { workspaceMembers } from '../db/schema/workspaces.js';
 import { cards } from '../db/schema/cards.js';
+import { users } from '../db/schema/users.js';
 import { UnauthorizedError, ForbiddenError, NotFoundError } from '../utils/errors.js';
 import type { BoardRole, WorkspaceRole } from '@mello/shared';
 
@@ -11,6 +12,15 @@ export async function requireAuth(request: FastifyRequest, _reply: FastifyReply)
   if (!request.userId) {
     throw new UnauthorizedError();
   }
+}
+
+export async function requireAdmin(request: FastifyRequest, _reply: FastifyReply) {
+  if (!request.userId) throw new UnauthorizedError();
+  const [user] = await db
+    .select({ isAdmin: users.isAdmin })
+    .from(users)
+    .where(eq(users.id, request.userId));
+  if (!user?.isAdmin) throw new ForbiddenError();
 }
 
 export function requireWorkspaceRole(...roles: WorkspaceRole[]) {

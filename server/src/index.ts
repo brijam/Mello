@@ -21,6 +21,7 @@ import { attachmentRoutes } from './routes/attachments.js';
 import { searchRoutes } from './routes/search.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { activityRoutes } from './routes/activities.js';
+import { adminRoutes } from './routes/admin.js';
 
 const app = Fastify({
   logger: {
@@ -93,9 +94,24 @@ await app.register(attachmentRoutes, { prefix: '/api/v1' });
 await app.register(searchRoutes, { prefix: '/api/v1' });
 await app.register(notificationRoutes, { prefix: '/api/v1' });
 await app.register(activityRoutes, { prefix: '/api/v1' });
+await app.register(adminRoutes, { prefix: '/api/v1/admin' });
 
 // Health check
 app.get('/api/health', async () => ({ status: 'ok' }));
+
+// One-time backfill: promote any existing non-admin users to admin.
+// Idempotent — once everyone is admin this updates 0 rows.
+import { sql } from 'drizzle-orm';
+import { db } from './db/index.js';
+import { users } from './db/schema/users.js';
+const promoted = await db
+  .update(users)
+  .set({ isAdmin: true })
+  .where(sql`${users.isAdmin} = false`)
+  .returning({ id: users.id });
+if (promoted.length > 0) {
+  app.log.info(`Promoted ${promoted.length} existing user(s) to admin`);
+}
 
 // Start
 try {
