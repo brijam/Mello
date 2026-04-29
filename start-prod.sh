@@ -81,15 +81,34 @@ if [[ ! -e "${SHARED_LINK}" ]]; then
   echo "ERROR: ${SHARED_LINK} does not exist — npm install did not link the workspace" >&2
   exit 1
 fi
-RESOLVED_ADMIN="$(readlink -f "${SHARED_LINK}")/dist/schemas/admin.d.ts"
+RESOLVED="$(readlink -f "${SHARED_LINK}")"
+RESOLVED_ADMIN="${RESOLVED}/dist/schemas/admin.d.ts"
 echo "    server will read: ${RESOLVED_ADMIN}"
-if ! grep -q adminSetWorkspaceRoleSchema "${RESOLVED_ADMIN}"; then
-  echo "ERROR: ${RESOLVED_ADMIN} does not contain adminSetWorkspaceRoleSchema" >&2
-  echo "       readlink target: $(readlink -f "${SHARED_LINK}")" >&2
-  echo "       contents:"  >&2
-  ls -la "$(readlink -f "${SHARED_LINK}")/dist/schemas/" >&2
-  exit 1
-fi
+
+echo "--- contents of ${RESOLVED}/dist ---"
+ls -la "${RESOLVED}/dist"
+echo "--- contents of ${RESOLVED}/dist/schemas ---"
+ls -la "${RESOLVED}/dist/schemas"
+echo "--- ${RESOLVED}/dist/index.d.ts ---"
+cat "${RESOLVED}/dist/index.d.ts"
+echo "--- ${RESOLVED}/dist/schemas/index.d.ts ---"
+cat "${RESOLVED}/dist/schemas/index.d.ts"
+echo "--- ${RESOLVED}/package.json ---"
+cat "${RESOLVED}/package.json"
+echo "--- end dump ---"
+
+# Every step of the export chain must include the admin barrel; otherwise the
+# server tsc will see the @mello/shared "main" type but nothing under it.
+[[ -f "${RESOLVED}/dist/index.d.ts" ]] \
+  || { echo "ERROR: ${RESOLVED}/dist/index.d.ts missing" >&2; exit 1; }
+[[ -f "${RESOLVED}/dist/schemas/index.d.ts" ]] \
+  || { echo "ERROR: ${RESOLVED}/dist/schemas/index.d.ts missing" >&2; exit 1; }
+grep -q "schemas/index" "${RESOLVED}/dist/index.d.ts" \
+  || { echo "ERROR: dist/index.d.ts does not re-export schemas/index" >&2; exit 1; }
+grep -q "admin" "${RESOLVED}/dist/schemas/index.d.ts" \
+  || { echo "ERROR: dist/schemas/index.d.ts does not re-export admin" >&2; exit 1; }
+grep -q adminSetWorkspaceRoleSchema "${RESOLVED_ADMIN}" \
+  || { echo "ERROR: ${RESOLVED_ADMIN} does not contain adminSetWorkspaceRoleSchema" >&2; exit 1; }
 
 echo "==> Build @mello/server"
 run_as_mello "npm run build --workspace=@mello/server"
