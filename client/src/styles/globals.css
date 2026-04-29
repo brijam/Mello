@@ -1,3 +1,126 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+/*
+ * Dark mode overrides
+ *
+ * The toggle adds .dark to <html>. Selectors below use higher specificity than
+ * Tailwind's single-class utilities, so they override without !important.
+ * This avoids having to sprinkle dark: variants through every component.
+ */
+
+html.dark {
+  color-scheme: dark;
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+html.dark body {
+  background-color: #0f172a;
+  color: #e2e8f0;
+}
+
+/* Surfaces — whites and light grays become dark slates */
+html.dark .bg-white { background-color: #1e293b; }
+html.dark .bg-gray-50 { background-color: #1e293b; }
+html.dark .bg-gray-100 { background-color: #1e293b; }
+html.dark .bg-gray-200 { background-color: #334155; }
+html.dark .bg-gray-300 { background-color: #475569; }
+html.dark .bg-slate-50 { background-color: #1e293b; }
+html.dark .bg-slate-100 { background-color: #1e293b; }
+html.dark .bg-slate-200 { background-color: #334155; }
+
+/* Hover surfaces */
+html.dark .hover\:bg-white:hover { background-color: #1e293b; }
+html.dark .hover\:bg-gray-50:hover { background-color: #334155; }
+html.dark .hover\:bg-gray-100:hover { background-color: #334155; }
+html.dark .hover\:bg-gray-200:hover { background-color: #475569; }
+html.dark .hover\:bg-gray-300:hover { background-color: #475569; }
+
+/* Text — invert grays */
+html.dark .text-gray-900 { color: #f1f5f9; }
+html.dark .text-gray-800 { color: #e2e8f0; }
+html.dark .text-gray-700 { color: #cbd5e1; }
+html.dark .text-gray-600 { color: #94a3b8; }
+html.dark .text-gray-500 { color: #94a3b8; }
+html.dark .text-gray-400 { color: #64748b; }
+html.dark .text-slate-900 { color: #f1f5f9; }
+html.dark .text-slate-800 { color: #e2e8f0; }
+html.dark .text-slate-700 { color: #cbd5e1; }
+html.dark .text-slate-600 { color: #94a3b8; }
+html.dark .text-slate-500 { color: #94a3b8; }
+
+html.dark .hover\:text-gray-900:hover { color: #f1f5f9; }
+html.dark .hover\:text-gray-800:hover { color: #e2e8f0; }
+html.dark .hover\:text-gray-700:hover { color: #cbd5e1; }
+html.dark .hover\:text-gray-600:hover { color: #cbd5e1; }
+
+/* Borders */
+html.dark .border-gray-100 { border-color: #334155; }
+html.dark .border-gray-200 { border-color: #334155; }
+html.dark .border-gray-300 { border-color: #475569; }
+html.dark .border-slate-100 { border-color: #334155; }
+html.dark .border-slate-200 { border-color: #334155; }
+html.dark .border-slate-300 { border-color: #475569; }
+
+/* Dividers */
+html.dark .divide-gray-100 > :not([hidden]) ~ :not([hidden]) { border-color: #334155; }
+html.dark .divide-gray-200 > :not([hidden]) ~ :not([hidden]) { border-color: #334155; }
+
+/* Tinted notice backgrounds — soften so red/yellow/green/blue tints are legible on dark */
+html.dark .bg-red-50 { background-color: #3f1d1d; }
+html.dark .bg-red-100 { background-color: #4c1d1d; }
+html.dark .text-red-700 { color: #fca5a5; }
+html.dark .text-red-600 { color: #fca5a5; }
+html.dark .border-red-200 { border-color: #7f1d1d; }
+html.dark .border-red-300 { border-color: #7f1d1d; }
+
+html.dark .bg-yellow-50 { background-color: #3a2e0f; }
+html.dark .bg-yellow-100 { background-color: #4a3a13; }
+html.dark .text-yellow-800 { color: #fcd34d; }
+html.dark .text-yellow-700 { color: #fcd34d; }
+html.dark .border-yellow-200 { border-color: #78350f; }
+
+html.dark .bg-green-50 { background-color: #14301d; }
+html.dark .bg-green-100 { background-color: #1a3d24; }
+html.dark .text-green-700 { color: #86efac; }
+html.dark .text-green-800 { color: #86efac; }
+html.dark .border-green-200 { border-color: #166534; }
+
+html.dark .bg-blue-50 { background-color: #172554; }
+html.dark .bg-blue-100 { background-color: #1e3a8a; }
+html.dark .text-blue-700 { color: #93c5fd; }
+html.dark .text-blue-800 { color: #93c5fd; }
+html.dark .border-blue-200 { border-color: #1e3a8a; }
+
+/* Inputs — keep readable in dark */
+html.dark input[type='text'],
+html.dark input[type='email'],
+html.dark input[type='password'],
+html.dark input[type='search'],
+html.dark input[type='url'],
+html.dark input[type='number'],
+html.dark input[type='date'],
+html.dark input[type='datetime-local'],
+html.dark textarea,
+html.dark select {
+  background-color: #1e293b;
+  color: #e2e8f0;
+  border-color: #475569;
+}
+
+html.dark input::placeholder,
+html.dark textarea::placeholder {
+  color: #64748b;
+}
+
+/* Shadows are mostly invisible on dark — slightly darken so cards still pop */
+html.dark .shadow,
+html.dark .shadow-sm,
+html.dark .shadow-md,
+html.dark .shadow-lg,
+html.dark .shadow-xl {
+  --tw-shadow-color: rgba(0, 0, 0, 0.6);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+}

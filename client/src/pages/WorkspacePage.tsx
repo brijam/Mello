@@ -4,6 +4,7 @@ import { useAuthStore } from '../stores/authStore.js';
 import { api } from '../api/client.js';
 import type { Board, Workspace } from '@mello/shared';
 import FontSizeSelector from '../components/common/FontSizeSelector.js';
+import DarkModeToggle from '../components/common/DarkModeToggle.js';
 import SearchBar from '../components/search/SearchBar.js';
 import NotificationBell from '../components/notifications/NotificationBell.js';
 import KeyboardShortcutsHelp from '../components/common/KeyboardShortcutsHelp.js';
@@ -173,6 +174,7 @@ export default function WorkspacePage() {
         <div className="flex items-center gap-3">
           <SearchBar />
           <FontSizeSelector />
+          <DarkModeToggle />
           <NotificationBell />
           <span className="text-sm">{user?.displayName}</span>
           <button

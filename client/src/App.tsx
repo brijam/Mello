@@ -19,6 +19,7 @@ function ProtectedRoute({ children }: { children: React.ReactNode }) {
 export default function App() {
   const { fetchMe } = useAuthStore();
   const fontSize = useSettingsStore((s) => s.fontSize);
+  const darkMode = useSettingsStore((s) => s.darkMode);
 
   useEffect(() => {
     fetchMe();
@@ -28,6 +29,10 @@ export default function App() {
   useEffect(() => {
     document.documentElement.style.fontSize = `${fontSizeMap[fontSize]}px`;
   }, [fontSize]);
+
+  useEffect(() => {
+    document.documentElement.classList.toggle('dark', darkMode);
+  }, [darkMode]);
 
   return (
     <Routes>

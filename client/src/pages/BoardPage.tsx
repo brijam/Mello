@@ -24,6 +24,7 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts.js';
 import List from '../components/board/List.js';
 import AddList from '../components/board/AddList.js';
 import FontSizeSelector from '../components/common/FontSizeSelector.js';
+import DarkModeToggle from '../components/common/DarkModeToggle.js';
 import SearchBar from '../components/search/SearchBar.js';
 import NotificationBell from '../components/notifications/NotificationBell.js';
 import FilterPopover from '../components/board/FilterPopover.js';
@@ -464,6 +465,7 @@ export default function BoardPage() {
             </button>
           )}
           <FontSizeSelector />
+          <DarkModeToggle />
           <NotificationBell />
           <AvatarUpload />
           <span className="text-sm">{user?.displayName}</span>
