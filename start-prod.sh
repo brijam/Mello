@@ -141,10 +141,40 @@ rm -f "$NEW_UNIT"
 
 echo "==> Enabling and (re)starting ${UNIT_NAME}"
 systemctl enable "$UNIT_NAME" >/dev/null
-systemctl restart "$UNIT_NAME"
+if ! systemctl restart "$UNIT_NAME"; then
+  echo "ERROR: systemctl restart ${UNIT_NAME} failed" >&2
+  systemctl --no-pager --full status "$UNIT_NAME" >&2 || true
+  echo "---- last 60 journal lines ----" >&2
+  journalctl -u "$UNIT_NAME" --no-pager -n 60 >&2 || true
+  exit 1
+fi
+
+# Give it a moment to either come up or crash.
+for _ in 1 2 3 4 5 6 7 8 9 10; do
+  STATE="$(systemctl is-active "$UNIT_NAME" || true)"
+  case "$STATE" in
+    active) break ;;
+    failed)
+      echo "ERROR: ${UNIT_NAME} entered failed state" >&2
+      systemctl --no-pager --full status "$UNIT_NAME" >&2
+      echo "---- last 60 journal lines ----" >&2
+      journalctl -u "$UNIT_NAME" --no-pager -n 60 >&2
+      exit 1
+      ;;
+    *) sleep 1 ;;
+  esac
+done
+
+if [[ "$(systemctl is-active "$UNIT_NAME")" != "active" ]]; then
+  echo "ERROR: ${UNIT_NAME} never reached 'active' state (currently: $(systemctl is-active "$UNIT_NAME"))" >&2
+  systemctl --no-pager --full status "$UNIT_NAME" >&2
+  echo "---- last 60 journal lines ----" >&2
+  journalctl -u "$UNIT_NAME" --no-pager -n 60 >&2
+  exit 1
+fi
 
 echo
-systemctl --no-pager --full status "$UNIT_NAME" || true
+systemctl --no-pager --full status "$UNIT_NAME"
 
 cat <<EOM
 
