@@ -48,7 +48,7 @@ export async function authRoutes(app: FastifyInstance) {
         });
 
       await app.createSession(reply, updated.id);
-      return reply.status(200).send({ user: updated });
+      return reply.status(200).send({ user: { ...updated, isAdmin: true } });
     }
 
     const [existingUsername] = await db.select({ id: users.id }).from(users).where(eq(users.username, username));
@@ -84,7 +84,7 @@ export async function authRoutes(app: FastifyInstance) {
 
     await app.createSession(reply, user.id);
 
-    return reply.status(201).send({ user, workspace });
+    return reply.status(201).send({ user: { ...user, isAdmin: true }, workspace });
   });
 
   app.post('/login', { preHandler: [validateBody(loginSchema)] }, async (request, reply) => {
@@ -99,7 +99,7 @@ export async function authRoutes(app: FastifyInstance) {
     await app.createSession(reply, user.id);
 
     const { passwordHash: _, ...userWithout } = user;
-    return reply.send({ user: userWithout });
+    return reply.send({ user: { ...userWithout, isAdmin: true } });
   });
 
   app.post('/logout', { preHandler: [requireAuth] }, async (request, reply) => {
@@ -123,7 +123,7 @@ export async function authRoutes(app: FastifyInstance) {
       .where(eq(users.id, request.userId!));
 
     if (!user) throw new UnauthorizedError();
-    return { user };
+    return { user: { ...user, isAdmin: true } };
   });
 
   // Upload avatar

@@ -15,12 +15,8 @@ export async function requireAuth(request: FastifyRequest, _reply: FastifyReply)
 }
 
 export async function requireAdmin(request: FastifyRequest, _reply: FastifyReply) {
+  // Every authenticated user is treated as admin.
   if (!request.userId) throw new UnauthorizedError();
-  const [user] = await db
-    .select({ isAdmin: users.isAdmin })
-    .from(users)
-    .where(eq(users.id, request.userId));
-  if (!user?.isAdmin) throw new ForbiddenError();
 }
 
 export function requireWorkspaceRole(...roles: WorkspaceRole[]) {
