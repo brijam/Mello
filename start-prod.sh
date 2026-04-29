@@ -24,31 +24,30 @@ run_as_mello() {
     bash -c "cd '${REPO_DIR}' && umask 002 && $*"
 }
 
-echo "==> Wipe stale build outputs and workspace symlinks"
+echo "==> Repo state"
+git -C "$REPO_DIR" log -1 --oneline
+git -C "$REPO_DIR" status --short || true
+
+echo "==> Nuke build outputs, tsbuildinfo files, and EVERY node_modules/"
 rm -rf "${REPO_DIR}/packages/shared/dist" \
        "${REPO_DIR}/server/dist" \
        "${REPO_DIR}/client/dist" \
-       "${REPO_DIR}/node_modules/.cache" \
        "${REPO_DIR}/server/tsconfig.tsbuildinfo" \
        "${REPO_DIR}/packages/shared/tsconfig.tsbuildinfo" \
        "${REPO_DIR}/client/tsconfig.tsbuildinfo"
+find "$REPO_DIR" -type d -name node_modules -prune -exec rm -rf {} +
 
-# Hunt down ANY copy of @mello workspace links/dirs anywhere under the repo,
-# including nested node_modules/ inside individual workspaces. Leftovers from
-# earlier installs cause server tsc to read a stale @mello/shared/dist that's
-# missing the newer exports.
-echo "==> Removing all @mello workspace entries from every node_modules/"
-find "$REPO_DIR" -type d -name node_modules -prune -exec sh -c '
-  for nm in "$@"; do
-    if [ -e "$nm/@mello" ]; then
-      echo "    wiping $nm/@mello"
-      rm -rf "$nm/@mello"
-    fi
-  done
-' _ {} +
-
-echo "==> npm install"
+echo "==> Fresh npm install"
 run_as_mello "npm install --no-audit --no-fund"
+
+echo "==> Sanity: source admin.ts has the schemas we expect"
+for sym in adminCreateUserSchema adminUpdateUserSchema adminResetPasswordSchema \
+           adminSetBoardRoleSchema adminSetWorkspaceRoleSchema; do
+  if ! grep -q "$sym" "${REPO_DIR}/packages/shared/src/schemas/admin.ts"; then
+    echo "ERROR: ${sym} missing from src/schemas/admin.ts — git pull didn't bring in the latest source" >&2
+    exit 1
+  fi
+done
 
 echo "==> Build @mello/shared"
 run_as_mello "npm run build --workspace=@mello/shared"
