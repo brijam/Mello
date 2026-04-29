@@ -7,3 +7,4 @@ export * from './checklist.js';
 export * from './comment.js';
 export * from './search.js';
 export * from './notification.js';
+export * from './admin.js';
