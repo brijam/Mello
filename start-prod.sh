@@ -66,6 +66,23 @@ for sym in adminCreateUserSchema adminUpdateUserSchema adminResetPasswordSchema 
   fi
 done
 
+echo "==> Verify server resolves @mello/shared to the freshly built dist"
+SHARED_LINK="${REPO_DIR}/node_modules/@mello/shared"
+ls -la "${REPO_DIR}/node_modules/@mello/" || true
+if [[ ! -e "${SHARED_LINK}" ]]; then
+  echo "ERROR: ${SHARED_LINK} does not exist — npm install did not link the workspace" >&2
+  exit 1
+fi
+RESOLVED_ADMIN="$(readlink -f "${SHARED_LINK}")/dist/schemas/admin.d.ts"
+echo "    server will read: ${RESOLVED_ADMIN}"
+if ! grep -q adminSetWorkspaceRoleSchema "${RESOLVED_ADMIN}"; then
+  echo "ERROR: ${RESOLVED_ADMIN} does not contain adminSetWorkspaceRoleSchema" >&2
+  echo "       readlink target: $(readlink -f "${SHARED_LINK}")" >&2
+  echo "       contents:"  >&2
+  ls -la "$(readlink -f "${SHARED_LINK}")/dist/schemas/" >&2
+  exit 1
+fi
+
 echo "==> Build server"
 run_as_mello "npm run build --workspace=server"
 [[ -f "${REPO_DIR}/server/dist/index.js" ]] \
