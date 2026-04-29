@@ -175,6 +175,12 @@ export default function WorkspacePage() {
           <FontSizeSelector />
           <NotificationBell />
           <span className="text-sm">{user?.displayName}</span>
+          <button
+            onClick={() => navigate('/admin/users')}
+            className="text-sm hover:underline opacity-80"
+          >
+            Users
+          </button>
           <button onClick={handleLogout} className="text-sm hover:underline opacity-80">
             Logout
           </button>

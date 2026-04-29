@@ -74,10 +74,6 @@ export default function AdminUsersPage() {
   };
 
   useEffect(() => {
-    if (user && !user.isAdmin) {
-      navigate('/', { replace: true });
-      return;
-    }
     if (user) refresh();
   }, [user, navigate]);
 
