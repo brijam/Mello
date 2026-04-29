@@ -28,11 +28,24 @@ echo "==> Wipe stale build outputs and workspace symlinks"
 rm -rf "${REPO_DIR}/packages/shared/dist" \
        "${REPO_DIR}/server/dist" \
        "${REPO_DIR}/client/dist" \
-       "${REPO_DIR}/node_modules/@mello" \
        "${REPO_DIR}/node_modules/.cache" \
        "${REPO_DIR}/server/tsconfig.tsbuildinfo" \
        "${REPO_DIR}/packages/shared/tsconfig.tsbuildinfo" \
        "${REPO_DIR}/client/tsconfig.tsbuildinfo"
+
+# Hunt down ANY copy of @mello workspace links/dirs anywhere under the repo,
+# including nested node_modules/ inside individual workspaces. Leftovers from
+# earlier installs cause server tsc to read a stale @mello/shared/dist that's
+# missing the newer exports.
+echo "==> Removing all @mello workspace entries from every node_modules/"
+find "$REPO_DIR" -type d -name node_modules -prune -exec sh -c '
+  for nm in "$@"; do
+    if [ -e "$nm/@mello" ]; then
+      echo "    wiping $nm/@mello"
+      rm -rf "$nm/@mello"
+    fi
+  done
+' _ {} +
 
 echo "==> npm install"
 run_as_mello "npm install --no-audit --no-fund"
