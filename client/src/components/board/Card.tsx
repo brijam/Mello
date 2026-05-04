@@ -16,6 +16,7 @@ interface CardProps {
     attachmentCount?: number;
     commentCount?: number;
     isTemplate?: boolean;
+    coverAttachmentId?: string | null;
   };
   listId: string;
 }
@@ -77,12 +78,21 @@ export default memo(function Card({ card, listId }: CardProps) {
           }
           setShowDetail(true);
         }}
-        className={`rounded-lg shadow-sm px-3 py-2 cursor-pointer group ${
+        className={`rounded-lg shadow-sm cursor-pointer group overflow-hidden ${
           card.isTemplate
             ? 'bg-blue-50 border border-dashed border-blue-300 hover:bg-blue-100'
             : 'bg-white hover:bg-gray-50'
         }`}
       >
+        {card.coverAttachmentId && (
+          <img
+            src={`/api/v1/attachments/${card.coverAttachmentId}/download`}
+            alt=""
+            className="w-full h-28 object-cover"
+            draggable={false}
+          />
+        )}
+        <div className="px-3 py-2">
         {card.isTemplate && (
           <div className="flex items-center gap-1 mb-1.5">
             <svg className="w-3.5 h-3.5 text-blue-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -174,6 +184,7 @@ export default memo(function Card({ card, listId }: CardProps) {
             ))}
           </div>
         )}
+        </div>
       </div>
 
       <Modal isOpen={showDetail} onClose={() => setShowDetail(false)}>

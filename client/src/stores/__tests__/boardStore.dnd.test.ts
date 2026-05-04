@@ -23,6 +23,7 @@ function makeCard(overrides: {
     attachmentCount: 0,
     commentCount: 0,
     isTemplate: false,
+    coverAttachmentId: null,
     createdAt: '2026-01-01T00:00:00Z',
     updatedAt: '2026-01-01T00:00:00Z',
   };

@@ -25,6 +25,7 @@ interface CardSummary {
   attachmentCount: number;
   commentCount: number;
   isTemplate: boolean;
+  coverAttachmentId: string | null;
   createdAt: string;
   updatedAt: string;
 }

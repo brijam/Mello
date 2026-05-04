@@ -10,6 +10,7 @@ export const cards = pgTable('cards', {
   description: text('description'),
   position: doublePrecision('position').notNull(),
   isTemplate: boolean('is_template').default(false).notNull(),
+  coverAttachmentId: uuid('cover_attachment_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [

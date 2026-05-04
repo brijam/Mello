@@ -32,6 +32,7 @@ interface CardDetailData {
   attachments: unknown[];
   commentCount: number;
   isTemplate: boolean;
+  coverAttachmentId: string | null;
 }
 
 /** Click-outside wrapper for the label picker dropdown */
@@ -328,6 +329,17 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
       >
         &times;
       </button>
+
+      {card.coverAttachmentId && (
+        <div className="w-full bg-gray-100 rounded-t-lg overflow-hidden" style={{ maxHeight: '200px' }}>
+          <img
+            src={`/api/v1/attachments/${card.coverAttachmentId}/download`}
+            alt="Cover"
+            className="w-full object-contain"
+            style={{ maxHeight: '200px' }}
+          />
+        </div>
+      )}
 
       {/* Header */}
       <div className="p-6 pb-2 pr-12">
@@ -657,6 +669,12 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
               attachments={(card.attachments as any[]) ?? []}
               onRefresh={fetchCard}
               currentUserId={user?.id}
+              coverAttachmentId={card.coverAttachmentId}
+              onCoverChange={(attachmentId) => {
+                setCard((prev) => prev ? { ...prev, coverAttachmentId: attachmentId } : prev);
+                const boardId = useBoardStore.getState().board?.id;
+                if (boardId) void useBoardStore.getState().fetchBoard(boardId);
+              }}
             />
           </section>
 

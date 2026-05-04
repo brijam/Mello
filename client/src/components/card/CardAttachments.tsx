@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react';
+import { useState, useRef, useCallback, useEffect } from 'react';
 
 interface Attachment {
   id: string;
@@ -14,6 +14,8 @@ interface CardAttachmentsProps {
   attachments: Attachment[];
   onRefresh: () => void;
   currentUserId?: string;
+  coverAttachmentId?: string | null;
+  onCoverChange?: (attachmentId: string | null) => void;
 }
 
 function formatFileSize(bytes: number): string {
@@ -30,7 +32,7 @@ function formatDate(dateStr: string): string {
   });
 }
 
-export default function CardAttachments({ cardId, attachments, onRefresh, currentUserId }: CardAttachmentsProps) {
+export default function CardAttachments({ cardId, attachments, onRefresh, currentUserId, coverAttachmentId, onCoverChange }: CardAttachmentsProps) {
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -83,6 +85,55 @@ export default function CardAttachments({ cardId, attachments, onRefresh, curren
 
   const handleDragLeave = () => {
     setDragOver(false);
+  };
+
+  // Paste-from-clipboard for screenshots (Alt-PrintScreen → Ctrl-V)
+  useEffect(() => {
+    function onPaste(e: ClipboardEvent) {
+      const target = e.target as HTMLElement | null;
+      if (target) {
+        const tag = target.tagName;
+        if (tag === 'INPUT' || tag === 'TEXTAREA' || target.isContentEditable) return;
+      }
+      const items = e.clipboardData?.items;
+      if (!items) return;
+      const imageFiles: File[] = [];
+      for (const item of items) {
+        if (item.kind === 'file' && item.type.startsWith('image/')) {
+          const f = item.getAsFile();
+          if (f) {
+            const ext = f.type.split('/')[1] || 'png';
+            const named = f.name && f.name !== 'image.png'
+              ? f
+              : new File([f], `screenshot-${Date.now()}.${ext}`, { type: f.type });
+            imageFiles.push(named);
+          }
+        }
+      }
+      if (imageFiles.length === 0) return;
+      e.preventDefault();
+      void Promise.all(imageFiles.map(uploadFile));
+    }
+    window.addEventListener('paste', onPaste);
+    return () => window.removeEventListener('paste', onPaste);
+  }, [uploadFile]);
+
+  const setCover = async (attachmentId: string | null) => {
+    try {
+      const res = await fetch(`/api/v1/cards/${cardId}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ coverAttachmentId: attachmentId }),
+      });
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error?.message || 'Failed to update cover');
+      }
+      onCoverChange?.(attachmentId);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to update cover');
+    }
   };
 
   const handleDelete = async (attachmentId: string) => {
@@ -187,6 +238,19 @@ export default function CardAttachments({ cardId, attachments, onRefresh, curren
 
               {/* Actions */}
               <div className="flex items-center gap-1 flex-shrink-0 opacity-0 group-hover:opacity-100 transition-opacity">
+                {isImage(att.mimeType) && (
+                  <button
+                    onClick={() => setCover(coverAttachmentId === att.id ? null : att.id)}
+                    className={`text-xs px-2 py-1 rounded ${
+                      coverAttachmentId === att.id
+                        ? 'text-blue-700 bg-blue-100 hover:bg-blue-200'
+                        : 'text-gray-500 hover:text-gray-700 hover:bg-gray-200'
+                    }`}
+                    title={coverAttachmentId === att.id ? 'Remove cover' : 'Make cover'}
+                  >
+                    {coverAttachmentId === att.id ? 'Remove cover' : 'Make cover'}
+                  </button>
+                )}
                 <a
                   href={`/api/v1/attachments/${att.id}/download`}
                   download

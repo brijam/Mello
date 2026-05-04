@@ -132,9 +132,19 @@ export async function cardRoutes(app: FastifyInstance) {
   // Update card
   app.patch('/cards/:cardId', {
     preHandler: [requireAuth, validateBody(updateCardSchema)],
-  }, async (request) => {
+  }, async (request, reply) => {
     const { cardId } = request.params as { cardId: string };
     const body = request.body as Record<string, unknown>;
+
+    if ('coverAttachmentId' in body && body.coverAttachmentId) {
+      const [att] = await db.select().from(attachments).where(eq(attachments.id, body.coverAttachmentId as string));
+      if (!att || att.cardId !== cardId) {
+        return reply.status(400).send({ error: { code: 'INVALID_COVER', message: 'Cover attachment not found on this card' } });
+      }
+      if (!att.mimeType?.startsWith('image/')) {
+        return reply.status(400).send({ error: { code: 'INVALID_COVER', message: 'Cover must be an image' } });
+      }
+    }
 
     const [card] = await db
       .update(cards)

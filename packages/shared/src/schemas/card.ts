@@ -12,6 +12,7 @@ export const updateCardSchema = z.object({
   description: z.string().nullable().optional(),
   position: z.number().optional(),
   isTemplate: z.boolean().optional(),
+  coverAttachmentId: z.string().uuid().nullable().optional(),
 });
 
 export const moveCardSchema = z.object({

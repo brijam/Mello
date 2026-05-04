@@ -7,6 +7,8 @@ import { NotFoundError } from '../utils/errors.js';
 import { config } from '../config.js';
 import { logActivity } from '../utils/activity.js';
 import { cards } from '../db/schema/cards.js';
+import { broadcast } from '../utils/broadcast.js';
+import { WS_EVENTS } from '@mello/shared';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
@@ -106,6 +108,15 @@ export async function attachmentRoutes(app: FastifyInstance) {
     }
 
     await db.delete(attachments).where(eq(attachments.id, id));
+
+    // If this attachment was the card's cover, the FK ON DELETE SET NULL clears it.
+    // Broadcast the updated card so clients re-render the cover area.
+    try {
+      const [updatedCard] = await db.select().from(cards).where(eq(cards.id, attachment.cardId));
+      if (updatedCard) {
+        broadcast(app.io, updatedCard.boardId, WS_EVENTS.CARD_UPDATED, { card: updatedCard });
+      }
+    } catch { /* fire-and-forget */ }
 
     try {
       const [card] = await db.select().from(cards).where(eq(cards.id, attachment.cardId));

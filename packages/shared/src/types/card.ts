@@ -10,6 +10,7 @@ export interface Card {
   name: string;
   description: string | null;
   position: number;
+  coverAttachmentId: string | null;
   createdAt: string;
   updatedAt: string;
 }
