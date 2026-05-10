@@ -3,6 +3,31 @@
 @tailwind utilities;
 
 /*
+ * iOS Safari: prevent auto-zoom on input focus. Safari force-zooms when the
+ * focused element's font-size is below 16px. Apply only on phone-width
+ * viewports so desktop type scale is unaffected.
+ */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select {
+    font-size: 16px;
+  }
+}
+
+/*
+ * iOS Safari: 100vh includes the dynamic toolbar, which causes content to be
+ * clipped under the address bar. Override Tailwind's min-h-screen / h-screen
+ * utilities to use the dynamic viewport unit, which excludes the toolbar.
+ * Supported in Safari 15.4+ (iOS 15.4+).
+ */
+@supports (height: 100dvh) {
+  .min-h-screen { min-height: 100dvh; }
+  .h-screen { height: 100dvh; }
+  .max-h-screen { max-height: 100dvh; }
+}
+
+/*
  * Dark mode overrides
  *
  * The toggle adds .dark to <html>. Selectors below use higher specificity than
