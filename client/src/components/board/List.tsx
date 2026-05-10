@@ -78,7 +78,7 @@ export default memo(function List({ list }: ListProps) {
     <div
       ref={setNodeRef}
       style={style}
-      className="bg-gray-200 rounded-xl w-[27rem] flex-shrink-0 flex flex-col max-h-[calc(100vh-120px)]"
+      className="bg-gray-200 rounded-xl w-[27rem] flex-shrink-0 flex flex-col max-h-[calc(100dvh-120px)]"
     >
       <div
         {...attributes}
@@ -158,7 +158,7 @@ export default memo(function List({ list }: ListProps) {
         </div>
       </div>
 
-        <div data-list-id={list.id} className="flex-1 overflow-y-auto px-2 pb-1 space-y-1.5 min-h-[2rem]">
+        <div data-list-id={list.id} className="flex-1 overflow-y-auto px-2 pb-1 space-y-1.5 min-h-[2rem] [-webkit-overflow-scrolling:touch] [overscroll-behavior:contain]">
           {sortedCards.map((card) => (
             <Card key={card.id} card={card} listId={list.id} />
           ))}

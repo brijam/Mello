@@ -30,7 +30,14 @@ export default function Modal({ isOpen, onClose, children }: ModalProps) {
 
   return createPortal(
     <div
-      className="fixed inset-0 bg-black/50 flex items-start justify-center pt-12 z-50 transition-opacity duration-200"
+      className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 transition-opacity duration-200 overflow-y-auto [-webkit-overflow-scrolling:touch] [overscroll-behavior:contain]"
+      style={{
+        height: '100dvh',
+        paddingTop: 'max(3rem, env(safe-area-inset-top))',
+        paddingBottom: 'env(safe-area-inset-bottom)',
+        paddingLeft: 'env(safe-area-inset-left)',
+        paddingRight: 'env(safe-area-inset-right)',
+      }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

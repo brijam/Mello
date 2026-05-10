@@ -12,7 +12,8 @@ import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts.js';
 import {
   DndContext,
   DragOverlay,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   closestCenter,
@@ -83,7 +84,8 @@ export default function WorkspacePage() {
   const [activeBoard, setActiveBoard] = useState<Board | null>(null);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
+    useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
 
   useKeyboardShortcuts({ onShowHelp: () => setShowShortcutsHelp(true) });
@@ -168,7 +170,7 @@ export default function WorkspacePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-100">
+    <div className="min-h-[100dvh] bg-gray-100">
       <header className="bg-mello-blue-dark text-white px-6 py-3 flex items-center justify-between">
         <h1 className="text-xl font-bold">Mello</h1>
         <div className="flex items-center gap-3">
