@@ -1,6 +1,7 @@
-import { pgTable, uuid, varchar, text, doublePrecision, timestamp, boolean, index } from 'drizzle-orm/pg-core';
+import { pgTable, uuid, varchar, text, doublePrecision, timestamp, boolean, jsonb, index } from 'drizzle-orm/pg-core';
 import { boards } from './boards.js';
 import { lists } from './lists.js';
+import type { AgentMeta } from '@mello/shared';
 
 export const cards = pgTable('cards', {
   id: uuid('id').defaultRandom().primaryKey(),
@@ -11,6 +12,7 @@ export const cards = pgTable('cards', {
   position: doublePrecision('position').notNull(),
   isTemplate: boolean('is_template').default(false).notNull(),
   coverAttachmentId: uuid('cover_attachment_id'),
+  agentMeta: jsonb('agent_meta').$type<AgentMeta | null>(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
   updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
 }, (t) => [

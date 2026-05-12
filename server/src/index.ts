@@ -22,6 +22,7 @@ import { searchRoutes } from './routes/search.js';
 import { notificationRoutes } from './routes/notifications.js';
 import { activityRoutes } from './routes/activities.js';
 import { adminRoutes } from './routes/admin.js';
+import { apiKeyRoutes } from './routes/api-keys.js';
 
 const app = Fastify({
   logger: {
@@ -95,6 +96,7 @@ await app.register(searchRoutes, { prefix: '/api/v1' });
 await app.register(notificationRoutes, { prefix: '/api/v1' });
 await app.register(activityRoutes, { prefix: '/api/v1' });
 await app.register(adminRoutes, { prefix: '/api/v1/admin' });
+await app.register(apiKeyRoutes, { prefix: '/api/v1' });
 
 // Health check
 app.get('/api/health', async () => ({ status: 'ok' }));

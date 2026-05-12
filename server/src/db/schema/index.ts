@@ -10,3 +10,4 @@ export { attachments } from './attachments.js';
 export { comments } from './comments.js';
 export { activities } from './activities.js';
 export { notifications } from './notifications.js';
+export { apiKeys } from './api-keys.js';

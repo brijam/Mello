@@ -3,9 +3,10 @@ import fp from 'fastify-plugin';
 import { Server } from 'socket.io';
 import { eq, and } from 'drizzle-orm';
 import { parse as parseCookie } from 'cookie';
-import { getSessionUserId, COOKIE_NAME_EXPORT } from './auth.js';
+import { getSessionUserId, COOKIE_NAME_EXPORT, hashApiKey } from './auth.js';
 import { db } from '../db/index.js';
 import { boardMembers } from '../db/schema/boards.js';
+import { apiKeys } from '../db/schema/api-keys.js';
 import { WS_EVENTS } from '@mello/shared';
 
 declare module 'fastify' {
@@ -24,23 +25,34 @@ async function socketPlugin(fastify: FastifyInstance) {
 
   fastify.decorate('io', io);
 
-  // Authenticate socket connections via session cookie
-  io.use((socket, next) => {
-    const cookieHeader = socket.handshake.headers.cookie;
-    if (!cookieHeader) {
-      return next(new Error('Authentication required'));
+  // Authenticate socket connections via API key (Bearer / auth.token) or session cookie
+  io.use(async (socket, next) => {
+    // 1. API key via auth payload or Authorization header
+    const tokenFromAuth = (socket.handshake.auth as Record<string, unknown> | undefined)?.token;
+    const authHeader = socket.handshake.headers.authorization;
+    const bearer = typeof tokenFromAuth === 'string'
+      ? tokenFromAuth
+      : (authHeader?.startsWith('Bearer ') ? authHeader.slice(7).trim() : null);
+
+    if (bearer) {
+      const [key] = await db.select().from(apiKeys).where(eq(apiKeys.keyHash, hashApiKey(bearer)));
+      if (key && !key.revokedAt) {
+        socket.data.userId = key.userId;
+        return next();
+      }
+      return next(new Error('Invalid API key'));
     }
+
+    // 2. Cookie session
+    const cookieHeader = socket.handshake.headers.cookie;
+    if (!cookieHeader) return next(new Error('Authentication required'));
 
     const cookies = parseCookie(cookieHeader);
     const sessionId = cookies[COOKIE_NAME_EXPORT];
-    if (!sessionId) {
-      return next(new Error('Authentication required'));
-    }
+    if (!sessionId) return next(new Error('Authentication required'));
 
     const userId = getSessionUserId(sessionId);
-    if (!userId) {
-      return next(new Error('Invalid session'));
-    }
+    if (!userId) return next(new Error('Invalid session'));
 
     socket.data.userId = userId;
     next();

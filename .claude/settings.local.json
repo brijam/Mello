@@ -134,7 +134,10 @@
       "Bash(npm run:*)",
       "Bash(PGPASSWORD=changeme psql -h localhost -U mello -d mello -c \"SELECT id, name, is_template, list_id, board_id FROM cards WHERE is_template = true;\")",
       "Bash(npm list:*)",
-      "Bash(/tmp/analysis.txt:*)"
+      "Bash(/tmp/analysis.txt:*)",
+      "Bash(npm:*)",
+      "Bash(pg_isready:*)",
+      "Bash(git log:*)"
     ]
   }
 }
