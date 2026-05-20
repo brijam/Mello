@@ -1,4 +1,4 @@
-import { request, FormData, File } from 'undici';
+import { request, FormData } from 'undici';
 import type { AgentMeta, CardDetail } from '@mello/shared';
 
 export interface ListSummary {
@@ -60,7 +60,9 @@ export class MelloClient {
   async uploadAttachment(cardId: string, filename: string, content: Buffer | string, mimeType = 'text/plain') {
     const fd = new FormData();
     const buffer = typeof content === 'string' ? Buffer.from(content, 'utf8') : content;
-    fd.set('file', new File([buffer], filename, { type: mimeType }));
+    const ab = new ArrayBuffer(buffer.byteLength);
+    new Uint8Array(ab).set(buffer);
+    fd.set('file', new File([ab], filename, { type: mimeType }));
     const res = await request(`${this.baseUrl}/api/v1/cards/${cardId}/attachments`, {
       method: 'POST',
       headers: { authorization: `Bearer ${this.apiKey}` },
