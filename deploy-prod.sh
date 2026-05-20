@@ -1,14 +1,13 @@
 #!/usr/bin/env bash
 # Update the Mello prod deploy on the Linode box.
-# Pulls latest master, installs deps if the lockfile changed, rebuilds,
-# runs new migrations, and restarts the systemd service.
+# Installs deps, rebuilds, runs any new migrations, and restarts the
+# systemd service. Pull the repo yourself before running this.
 # Run as a user that can read /etc/mello/mello.env and restart the service.
 set -euo pipefail
 
 REPO_DIR="${REPO_DIR:-/opt/mello-repo}"
 ENV_FILE="${ENV_FILE:-/etc/mello/mello.env}"
 SERVICE_NAME="${SERVICE_NAME:-mello}"
-BRANCH="${BRANCH:-master}"
 BACKUP_SCRIPT="${REPO_DIR}/backup-prod.sh"
 
 SKIP_BACKUP=0
@@ -20,15 +19,17 @@ usage() {
   cat <<USAGE
 Usage: $0 [--skip-backup] [--skip-install] [--skip-build] [--skip-migrate]
 
-Steps:
+Steps (each is idempotent — safe to re-run):
   1. ./backup-prod.sh --db-only   (unless --skip-backup)
-  2. git fetch && git reset --hard origin/\$BRANCH
-  3. npm install                  (only if package-lock.json changed)
-  4. npm run build                (unless --skip-build)
-  5. drizzle-kit migrate          (only if new migration files appeared)
-  6. systemctl restart \$SERVICE_NAME
+  2. npm install                  (unless --skip-install; no-op when lockfile matches)
+  3. npm run build                (unless --skip-build)
+  4. drizzle-kit migrate          (unless --skip-migrate; only applies new migrations)
+  5. systemctl restart \$SERVICE_NAME
 
-Env overrides: REPO_DIR, ENV_FILE, SERVICE_NAME, BRANCH
+Pull the repo before running:
+  cd $REPO_DIR && git pull && ./deploy-prod.sh
+
+Env overrides: REPO_DIR, ENV_FILE, SERVICE_NAME
 USAGE
   exit 1
 }
@@ -49,9 +50,8 @@ done
 
 cd "$REPO_DIR"
 
-OLD_SHA="$(git rev-parse HEAD)"
-OLD_LOCK_HASH="$(sha1sum package-lock.json 2>/dev/null | awk '{print $1}' || echo none)"
-OLD_MIGRATIONS="$(ls server/src/db/migrations/*.sql 2>/dev/null | wc -l)"
+CUR_SHA="$(git rev-parse HEAD)"
+echo "==> Deploying ${CUR_SHA:0:10}"
 
 if [[ "$SKIP_BACKUP" != "1" ]]; then
   if [[ -x "$BACKUP_SCRIPT" ]]; then
@@ -62,26 +62,9 @@ if [[ "$SKIP_BACKUP" != "1" ]]; then
   fi
 fi
 
-echo "==> Fetching origin/${BRANCH}"
-git fetch origin "$BRANCH"
-NEW_SHA="$(git rev-parse "origin/${BRANCH}")"
-
-if [[ "$OLD_SHA" == "$NEW_SHA" ]]; then
-  echo "Already at ${NEW_SHA}. Nothing to deploy."
-  exit 0
-fi
-
-echo "==> Updating ${OLD_SHA:0:10} -> ${NEW_SHA:0:10}"
-git reset --hard "origin/${BRANCH}"
-
-NEW_LOCK_HASH="$(sha1sum package-lock.json 2>/dev/null | awk '{print $1}' || echo none)"
-NEW_MIGRATIONS="$(ls server/src/db/migrations/*.sql 2>/dev/null | wc -l)"
-
-if [[ "$SKIP_INSTALL" != "1" && "$OLD_LOCK_HASH" != "$NEW_LOCK_HASH" ]]; then
-  echo "==> package-lock.json changed; running npm install"
+if [[ "$SKIP_INSTALL" != "1" ]]; then
+  echo "==> npm install"
   npm install
-else
-  echo "==> Skipping npm install (lockfile unchanged)"
 fi
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
@@ -89,11 +72,9 @@ if [[ "$SKIP_BUILD" != "1" ]]; then
   npm run build
 fi
 
-if [[ "$SKIP_MIGRATE" != "1" && "$NEW_MIGRATIONS" -gt "$OLD_MIGRATIONS" ]]; then
-  echo "==> New migrations detected (${OLD_MIGRATIONS} -> ${NEW_MIGRATIONS}); running drizzle-kit migrate"
+if [[ "$SKIP_MIGRATE" != "1" ]]; then
+  echo "==> drizzle-kit migrate"
   (cd server && npx drizzle-kit migrate)
-else
-  echo "==> Skipping migrations (no new files)"
 fi
 
 echo "==> Restarting ${SERVICE_NAME}"
@@ -101,4 +82,4 @@ sudo systemctl restart "$SERVICE_NAME"
 sleep 2
 sudo systemctl --no-pager status "$SERVICE_NAME" | head -n 15
 
-echo "Done. Deployed ${NEW_SHA:0:10}."
+echo "Done. Deployed ${CUR_SHA:0:10}."
