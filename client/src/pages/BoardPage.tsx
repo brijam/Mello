@@ -34,6 +34,22 @@ import CardDetail from '../components/card/CardDetail.js';
 import KeyboardShortcutsHelp from '../components/common/KeyboardShortcutsHelp.js';
 import AvatarUpload from '../components/common/AvatarUpload.js';
 import BackgroundColorPicker from '../components/board/BackgroundColorPicker.js';
+import MobileBoardView from '../components/board/MobileBoardView.js';
+
+function useIsMobile(query = '(max-width: 767px)') {
+  const [matches, setMatches] = useState(() =>
+    typeof window === 'undefined' ? false : window.matchMedia(query).matches,
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia(query);
+    const onChange = (e: MediaQueryListEvent) => setMatches(e.matches);
+    setMatches(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}
 
 export default function BoardPage() {
   const { boardId } = useParams<{ boardId: string }>();
@@ -53,6 +69,7 @@ export default function BoardPage() {
   const updateBoard = useBoardStore((s) => s.updateBoard);
   const { user, logout } = useAuthStore();
   useBoardSync(boardId);
+  const isMobile = useIsMobile();
 
   // Use refs for drag state to avoid re-renders during drag
   const activeIdRef = useRef<string | null>(null);
@@ -409,6 +426,24 @@ export default function BoardPage() {
     await logout();
     navigate('/login');
   };
+
+  if (isMobile) {
+    return (
+      <>
+        <MobileBoardView
+          boardId={board.id}
+          boardName={board.name}
+          workspaceId={board.workspaceId}
+          lists={sortedLists}
+        />
+        {cardIdFromUrl && (
+          <Modal isOpen={true} onClose={handleCloseCardDetail}>
+            <CardDetail cardId={cardIdFromUrl} onClose={handleCloseCardDetail} />
+          </Modal>
+        )}
+      </>
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] flex flex-col" style={bgStyle}>
