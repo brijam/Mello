@@ -4,6 +4,7 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotificationStore, type Notification } from '../../stores/notificationStore.js';
+import { MOBILE_BOTTOM_BAR_HEIGHT } from './MobileBottomBar.js';
 import { D, MOBILE_FONT_STACK } from './mobileTheme.js';
 
 interface MobileNotificationsSheetProps {
@@ -27,10 +28,13 @@ export default function MobileNotificationsSheet({ onClose }: MobileNotification
     <div
       style={{
         position: 'fixed',
-        inset: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: MOBILE_BOTTOM_BAR_HEIGHT,
         background: D.bg,
         color: D.ink,
-        zIndex: 70,
+        zIndex: 20,
         fontFamily: MOBILE_FONT_STACK,
         display: 'flex',
         flexDirection: 'column',
@@ -43,24 +47,11 @@ export default function MobileNotificationsSheet({ onClose }: MobileNotification
           justifyContent: 'space-between',
           paddingTop: 'max(env(safe-area-inset-top), 10px)',
           paddingBottom: 10,
-          paddingLeft: 12,
+          paddingLeft: 16,
           paddingRight: 12,
           borderBottom: `0.5px solid ${D.hair}`,
         }}
       >
-        <button
-          onClick={onClose}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: D.sky,
-            padding: 8,
-            fontSize: 15,
-            cursor: 'pointer',
-          }}
-        >
-          Done
-        </button>
         <div style={{ fontSize: 16, fontWeight: 600 }}>Inbox</div>
         <button
           disabled={unreadCount === 0}

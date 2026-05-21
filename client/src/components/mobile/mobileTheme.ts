@@ -40,9 +40,11 @@ export function paletteDot(index: number): string {
 
 export function listAccentColor(
   list: { color?: string | null },
-  index: number,
+  _index: number,
 ): string {
-  return list.color ?? paletteDot(index);
+  // Use a neutral default so picking any palette color produces a visible
+  // change. Index-based defaults caused "I picked red, dot was already red".
+  return list.color ?? D.mute;
 }
 
 export function boardAccentColor(

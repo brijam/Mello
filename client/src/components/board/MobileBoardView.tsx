@@ -189,10 +189,18 @@ export default function MobileBoardView({
     setSearchParams(next, { replace: true });
   }, [searchParams, setSearchParams]);
 
+  const activeTab = showInbox ? 'notifications' : showSearch ? 'search' : null;
   const common = useCommonActions({
     workspaceId,
-    onNotifications: () => setShowInbox(true),
-    onSearch: () => setShowSearch(true),
+    activeTab,
+    onNotifications: () => {
+      setShowSearch(false);
+      setShowInbox((v) => !v);
+    },
+    onSearch: () => {
+      setShowInbox(false);
+      setShowSearch((v) => !v);
+    },
   });
 
   // The board's accent dot: defaults to backgroundValue when board uses a

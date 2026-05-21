@@ -185,27 +185,56 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
 
   return (
     <div
+      onClick={onClose}
       style={{
         position: 'fixed',
         inset: 0,
         zIndex: 70,
-        background: D.bg,
-        color: D.ink,
+        background: 'rgba(0,0,0,0.5)',
         fontFamily: MOBILE_FONT_STACK,
         display: 'flex',
-        flexDirection: 'column',
+        alignItems: 'flex-end',
+        justifyContent: 'center',
       }}
     >
+    <div
+      onClick={(e) => e.stopPropagation()}
+      style={{
+        width: '100%',
+        maxWidth: 540,
+        height: '92dvh',
+        background: D.bg,
+        color: D.ink,
+        borderTopLeftRadius: 18,
+        borderTopRightRadius: 18,
+        boxShadow: '0 -10px 30px rgba(0,0,0,0.5)',
+        display: 'flex',
+        flexDirection: 'column',
+        overflow: 'hidden',
+        fontFamily: MOBILE_FONT_STACK,
+      }}
+    >
+      <div
+        style={{
+          width: 36,
+          height: 4,
+          background: D.hair3,
+          borderRadius: 2,
+          margin: '8px auto 4px',
+          flexShrink: 0,
+        }}
+      />
       <header
         style={{
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
-          paddingTop: 'max(env(safe-area-inset-top), 10px)',
+          paddingTop: 6,
           paddingBottom: 10,
           paddingLeft: 12,
           paddingRight: 12,
           borderBottom: `0.5px solid ${D.hair}`,
+          flexShrink: 0,
         }}
       >
         <button
@@ -665,6 +694,7 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
           <CancelRow onClick={() => setSection('main')} />
         </Sheet>
       )}
+    </div>
     </div>
   );
 }

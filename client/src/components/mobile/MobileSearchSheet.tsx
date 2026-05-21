@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSearchStore } from '../../stores/searchStore.js';
+import { MOBILE_BOTTOM_BAR_HEIGHT } from './MobileBottomBar.js';
 import { D, MOBILE_FONT_STACK } from './mobileTheme.js';
 
 interface MobileSearchSheetProps {
@@ -37,10 +38,13 @@ export default function MobileSearchSheet({ onClose }: MobileSearchSheetProps) {
     <div
       style={{
         position: 'fixed',
-        inset: 0,
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: MOBILE_BOTTOM_BAR_HEIGHT,
         background: D.bg,
         color: D.ink,
-        zIndex: 70,
+        zIndex: 20,
         fontFamily: MOBILE_FONT_STACK,
         display: 'flex',
         flexDirection: 'column',
@@ -85,27 +89,35 @@ export default function MobileSearchSheet({ onClose }: MobileSearchSheetProps) {
               color: D.ink,
               border: 'none',
               outline: 'none',
-              fontSize: 15,
+              fontSize: 16,
               fontFamily: MOBILE_FONT_STACK,
             }}
           />
+          {local && (
+            <button
+              onClick={() => {
+                setLocal('');
+                clear();
+                inputRef.current?.focus();
+              }}
+              aria-label="Clear search"
+              style={{
+                background: 'transparent',
+                border: 'none',
+                padding: 2,
+                color: D.mute,
+                display: 'inline-flex',
+                alignItems: 'center',
+                cursor: 'pointer',
+              }}
+            >
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <circle cx="8" cy="8" r="7" fill={D.mute2} />
+                <path d="M5 5l6 6M11 5l-6 6" stroke={D.bg} strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            </button>
+          )}
         </div>
-        <button
-          onClick={() => {
-            clear();
-            onClose();
-          }}
-          style={{
-            background: 'transparent',
-            border: 'none',
-            color: D.sky,
-            padding: 4,
-            fontSize: 15,
-            cursor: 'pointer',
-          }}
-        >
-          Cancel
-        </button>
       </header>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>

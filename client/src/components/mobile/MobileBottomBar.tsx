@@ -12,11 +12,16 @@ export interface BottomBarAction {
   onClick: () => void;
   variant?: 'default' | 'primary' | 'danger';
   badge?: number;
+  active?: boolean;
 }
 
 interface MobileBottomBarProps {
   actions: BottomBarAction[];
 }
+
+// Approximate visible height of the bottom bar including safe-area inset on
+// iOS. Used by overlays (inbox/search) so they don't sit on top of the bar.
+export const MOBILE_BOTTOM_BAR_HEIGHT = 88;
 
 export default function MobileBottomBar({ actions }: MobileBottomBarProps) {
   return (
@@ -48,12 +53,11 @@ export default function MobileBottomBar({ actions }: MobileBottomBarProps) {
         }}
       >
         {actions.map((a) => {
-          const color =
-            a.variant === 'primary'
-              ? D.sky
-              : a.variant === 'danger'
-                ? D.danger
-                : D.ink2;
+          const color = a.active
+            ? D.sky
+            : a.variant === 'danger'
+              ? D.danger
+              : D.mute;
           return (
             <button
               key={a.key}
@@ -69,7 +73,7 @@ export default function MobileBottomBar({ actions }: MobileBottomBarProps) {
                 gap: 3,
                 padding: '4px 6px',
                 fontSize: 10,
-                fontWeight: 500,
+                fontWeight: a.active ? 600 : 500,
                 letterSpacing: 0.1,
                 cursor: 'pointer',
                 position: 'relative',
@@ -169,8 +173,11 @@ export const Icon = {
 // Hook returning common bottom-bar actions usable from any screen. The hook
 // owner supplies behavior for notifications/search via callbacks because the
 // presentation differs per screen (sheet, full-screen, etc.).
+export type MobileTabKey = 'boards' | 'notifications' | 'search' | null;
+
 export function useCommonActions(opts: {
   workspaceId?: string;
+  activeTab?: MobileTabKey;
   onNotifications: () => void;
   onSearch: () => void;
 }) {
@@ -181,6 +188,7 @@ export function useCommonActions(opts: {
     key: 'boards',
     label: 'Boards',
     icon: Icon.Boards,
+    active: opts.activeTab === 'boards',
     onClick: () => {
       if (opts.workspaceId) navigate(`/w/${opts.workspaceId}`);
     },
@@ -191,6 +199,7 @@ export function useCommonActions(opts: {
     label: 'Inbox',
     icon: Icon.Bell,
     badge: unreadCount,
+    active: opts.activeTab === 'notifications',
     onClick: opts.onNotifications,
   });
 
@@ -198,6 +207,7 @@ export function useCommonActions(opts: {
     key: 'search',
     label: 'Search',
     icon: Icon.Search,
+    active: opts.activeTab === 'search',
     onClick: opts.onSearch,
   });
 

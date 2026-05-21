@@ -29,10 +29,18 @@ export default function MobileBoardsView({ workspace, boards, onCreate }: Mobile
   const [creating, setCreating] = useState(false);
 
   const sorted = [...boards].sort((a, b) => (a.position ?? 0) - (b.position ?? 0));
+  const activeTab = showInbox ? 'notifications' : showSearch ? 'search' : 'boards';
   const common = useCommonActions({
     workspaceId: workspace?.id,
-    onNotifications: () => setShowInbox(true),
-    onSearch: () => setShowSearch(true),
+    activeTab,
+    onNotifications: () => {
+      setShowSearch(false);
+      setShowInbox((v) => !v);
+    },
+    onSearch: () => {
+      setShowInbox(false);
+      setShowSearch((v) => !v);
+    },
   });
 
   async function handleSubmit() {
@@ -153,8 +161,10 @@ export default function MobileBoardsView({ workspace, boards, onCreate }: Mobile
                   style={{
                     display: 'flex',
                     alignItems: 'center',
+                    alignSelf: 'center',
                     paddingRight: 14,
                     color: D.mute,
+                    flexShrink: 0,
                   }}
                 >
                   <svg width="9" height="14" viewBox="0 0 9 14" fill="none">
