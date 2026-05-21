@@ -10,6 +10,7 @@ export interface Board {
   description: string | null;
   backgroundType: BackgroundType;
   backgroundValue: string;
+  accentColor: string | null;
   isTemplate: boolean;
   position: number;
   createdAt: string;

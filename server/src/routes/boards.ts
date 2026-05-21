@@ -201,6 +201,7 @@ export async function boardRoutes(app: FastifyInstance) {
       description?: string | null;
       backgroundType?: 'color' | 'image';
       backgroundValue?: string;
+      accentColor?: string | null;
       isTemplate?: boolean;
       position?: number;
     };
@@ -210,6 +211,7 @@ export async function boardRoutes(app: FastifyInstance) {
     if (body.description !== undefined) updateData.description = body.description;
     if (body.backgroundType !== undefined) updateData.backgroundType = body.backgroundType;
     if (body.backgroundValue !== undefined) updateData.backgroundValue = body.backgroundValue;
+    if (body.accentColor !== undefined) updateData.accentColor = body.accentColor;
     if (body.isTemplate !== undefined) updateData.isTemplate = body.isTemplate;
     if (body.position !== undefined) updateData.position = body.position;
 

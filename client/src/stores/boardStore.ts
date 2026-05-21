@@ -6,6 +6,7 @@ interface ListWithCards {
   id: string;
   boardId: string;
   name: string;
+  color?: string | null;
   position: number;
   createdAt: string;
   updatedAt: string;
@@ -45,15 +46,15 @@ interface BoardState {
 
   fetchBoard: (boardId: string, filters?: BoardFilterParams) => Promise<void>;
   addList: (boardId: string, name: string) => Promise<void>;
-  addCard: (listId: string, name: string) => Promise<void>;
-  updateList: (listId: string, data: { name?: string; position?: number }) => Promise<void>;
+  addCard: (listId: string, name: string) => Promise<CardSummary>;
+  updateList: (listId: string, data: { name?: string; color?: string | null; position?: number }) => Promise<void>;
   deleteList: (listId: string) => Promise<void>;
   updateCard: (cardId: string, data: { name?: string; description?: string | null }) => Promise<void>;
   moveCard: (cardId: string, listId: string, position: number) => Promise<void>;
   toggleCardLabel: (cardId: string, labelId: string, added: boolean) => void;
   toggleCardMember: (cardId: string, userId: string, added: boolean) => void;
   updateCardChecklist: (cardId: string, checklistItems: { total: number; checked: number } | null) => void;
-  updateBoard: (boardId: string, data: { name?: string; backgroundType?: string; backgroundValue?: string }) => Promise<void>;
+  updateBoard: (boardId: string, data: { name?: string; backgroundType?: string; backgroundValue?: string; accentColor?: string | null }) => Promise<void>;
   deleteCard: (cardId: string) => Promise<void>;
   moveCardLocally: (cardId: string, fromListId: string, toListId: string, newIndex: number) => number;
   moveListLocally: (listId: string, newIndex: number) => number;
@@ -126,17 +127,16 @@ export const useBoardStore = create<BoardState>((set, get) => ({
     const card = { ...data.card, labelIds: data.card.labelIds ?? [], memberIds: data.card.memberIds ?? [] };
     const { activeFilters } = get();
     const hasFilters = (activeFilters.labels?.length ?? 0) > 0 || (activeFilters.members?.length ?? 0) > 0;
-    if (hasFilters && !cardMatchesFilters(card, activeFilters)) {
-      // Card doesn't match active filters, don't add to UI
-      return;
+    if (!hasFilters || cardMatchesFilters(card, activeFilters)) {
+      set((state) => ({
+        lists: state.lists.map((list) => {
+          if (list.id !== listId) return list;
+          if (list.cards.some((c) => c.id === card.id)) return list;
+          return { ...list, cards: [...list.cards, card] };
+        }),
+      }));
     }
-    set((state) => ({
-      lists: state.lists.map((list) => {
-        if (list.id !== listId) return list;
-        if (list.cards.some((c) => c.id === card.id)) return list;
-        return { ...list, cards: [...list.cards, card] };
-      }),
-    }));
+    return card;
   },
 
   updateList: async (listId, body) => {

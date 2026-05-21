@@ -9,6 +9,7 @@ import SearchBar from '../components/search/SearchBar.js';
 import NotificationBell from '../components/notifications/NotificationBell.js';
 import KeyboardShortcutsHelp from '../components/common/KeyboardShortcutsHelp.js';
 import { useKeyboardShortcuts } from '../hooks/useKeyboardShortcuts.js';
+import MobileBoardsView from '../components/mobile/MobileBoardsView.js';
 import {
   DndContext,
   DragOverlay,
@@ -26,6 +27,21 @@ import {
 } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
+
+function useIsMobile(query = '(max-width: 767px)') {
+  const [matches, setMatches] = useState(() =>
+    typeof window === 'undefined' ? false : window.matchMedia(query).matches,
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const mq = window.matchMedia(query);
+    const onChange = (e: MediaQueryListEvent) => setMatches(e.matches);
+    setMatches(mq.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, [query]);
+  return matches;
+}
 
 function SortableBoardCard({ board }: { board: Board }) {
   const navigate = useNavigate();
@@ -87,6 +103,8 @@ export default function WorkspacePage() {
     useSensor(MouseSensor, { activationConstraint: { distance: 8 } }),
     useSensor(TouchSensor, { activationConstraint: { delay: 200, tolerance: 5 } }),
   );
+
+  const isMobile = useIsMobile();
 
   useKeyboardShortcuts({ onShowHelp: () => setShowShortcutsHelp(true) });
 
@@ -168,6 +186,23 @@ export default function WorkspacePage() {
     await logout();
     navigate('/login');
   };
+
+  if (isMobile) {
+    return (
+      <MobileBoardsView
+        workspace={workspace}
+        boards={boards}
+        onCreate={async (name) => {
+          if (!workspaceId) return;
+          const data = await api.post<{ board: Board }>('/boards', {
+            workspaceId,
+            name,
+          });
+          setBoards((prev) => [...prev, data.board]);
+        }}
+      />
+    );
+  }
 
   return (
     <div className="min-h-[100dvh] bg-gray-100">

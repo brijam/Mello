@@ -13,6 +13,7 @@ export const updateBoardSchema = z.object({
   description: z.string().max(1000).nullable().optional(),
   backgroundType: z.enum(['color', 'image']).optional(),
   backgroundValue: z.string().optional(),
+  accentColor: z.string().max(20).nullable().optional(),
   isTemplate: z.boolean().optional(),
   position: z.number().optional(),
 });

@@ -2,11 +2,13 @@ import { z } from 'zod';
 
 export const createListSchema = z.object({
   name: z.string().min(1).max(255),
+  color: z.string().max(20).nullable().optional(),
   position: z.number().optional(),
 });
 
 export const updateListSchema = z.object({
   name: z.string().min(1).max(255).optional(),
+  color: z.string().max(20).nullable().optional(),
   position: z.number().optional(),
 });
 

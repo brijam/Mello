@@ -428,20 +428,15 @@ export default function BoardPage() {
   };
 
   if (isMobile) {
+    // Mobile view manages its own card sheet, bottom bar, notifications and
+    // search overlays — no extra modal needed here.
     return (
-      <>
-        <MobileBoardView
-          boardId={board.id}
-          boardName={board.name}
-          workspaceId={board.workspaceId}
-          lists={sortedLists}
-        />
-        {cardIdFromUrl && (
-          <Modal isOpen={true} onClose={handleCloseCardDetail}>
-            <CardDetail cardId={cardIdFromUrl} onClose={handleCloseCardDetail} />
-          </Modal>
-        )}
-      </>
+      <MobileBoardView
+        boardId={board.id}
+        boardName={board.name}
+        workspaceId={board.workspaceId}
+        lists={sortedLists}
+      />
     );
   }
 

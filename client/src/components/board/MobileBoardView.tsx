@@ -1,46 +1,46 @@
 // Mello iOS — mobile-optimized board view.
-// One list visible at a time (sticky tabs at top). Each card has a left-edge
-// drag rail as the ONLY drag affordance, so vertical scrolling on the card
-// body never triggers a reorder.
+//
+// Layout: one list visible at a time with a sticky tab strip. The active list
+// renders inside an inner scroll container (separate from window scroll) so
+// pulling out the drag rail doesn't move the page. Cards reorder during drag
+// using dnd-kit's SortableContext so neighbors visibly slide; the active card
+// stays visible as a placeholder (faded, no rotation) and a DragOverlay
+// follows the finger.
 
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useNavigate, useSearchParams } from 'react-router-dom';
 import {
   DndContext,
   DragOverlay,
   TouchSensor,
   MouseSensor,
-  useDraggable,
-  useDroppable,
   useSensor,
   useSensors,
+  closestCenter,
   type DragStartEvent,
-  type DragMoveEvent,
   type DragEndEvent,
 } from '@dnd-kit/core';
+import { SortableContext, useSortable, verticalListSortingStrategy } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { useBoardStore } from '../../stores/boardStore.js';
 import LabelBadge from './LabelBadge.js';
-import AddCard from './AddCard.js';
-
-const D = {
-  bg: '#0A0A0A',
-  surface: '#141414',
-  surface2: '#1C1C1C',
-  hair: '#222222',
-  hair2: '#2A2A2A',
-  ink: '#F5F5F5',
-  ink2: '#D4D4D4',
-  mute: '#8A8A8A',
-  mute2: '#555555',
-  sky: '#5BA8FF',
-  coral: '#FF6B5B',
-  lime: '#B8FF5B',
-  violet: '#A88FFF',
-  amber: '#FFB85B',
-};
-
-const DOT_PALETTE = [D.coral, D.sky, D.amber, D.lime, D.violet];
-const listDot = (index: number) => DOT_PALETTE[index % DOT_PALETTE.length];
+import MobileBottomBar, { Icon, useCommonActions } from '../mobile/MobileBottomBar.js';
+import MobileListMenu, {
+  Sheet,
+  SheetHeader,
+  CancelRow,
+} from '../mobile/MobileListMenu.js';
+import MobileNotificationsSheet from '../mobile/MobileNotificationsSheet.js';
+import MobileSearchSheet from '../mobile/MobileSearchSheet.js';
+import MobileNewCard from '../mobile/MobileNewCard.js';
+import MobileCardSheet from '../mobile/MobileCardSheet.js';
+import {
+  D,
+  MOBILE_FONT_STACK,
+  MOBILE_PALETTE,
+  boardAccentColor,
+  listAccentColor,
+} from '../mobile/mobileTheme.js';
 
 interface CardSummary {
   id: string;
@@ -61,6 +61,7 @@ interface CardSummary {
 interface ListWithCards {
   id: string;
   name: string;
+  color?: string | null;
   position: number;
   cards: CardSummary[];
 }
@@ -80,8 +81,10 @@ export default function MobileBoardView({
 }: MobileBoardViewProps) {
   const navigate = useNavigate();
   const [searchParams, setSearchParams] = useSearchParams();
+  const board = useBoardStore((s) => s.board);
   const moveCard = useBoardStore((s) => s.moveCard);
   const moveCardLocally = useBoardStore((s) => s.moveCardLocally);
+  const addList = useBoardStore((s) => s.addList);
 
   const sortedLists = useMemo(
     () => [...lists].sort((a, b) => a.position - b.position),
@@ -91,7 +94,6 @@ export default function MobileBoardView({
   const [activeListId, setActiveListId] = useState<string | null>(
     sortedLists[0]?.id ?? null,
   );
-  // If lists arrive after first render or the active one is deleted, recover.
   const validActiveId = useMemo(() => {
     if (activeListId && sortedLists.some((l) => l.id === activeListId)) return activeListId;
     return sortedLists[0]?.id ?? null;
@@ -105,11 +107,19 @@ export default function MobileBoardView({
     [activeList],
   );
 
-  // Drag state
-  const [dragOverlayCard, setDragOverlayCard] = useState<CardSummary | null>(null);
-  const lastDragOverTime = useRef(0);
+  // ── Sheets / overlays ───────────────────────────────────────────────
+  const [showInbox, setShowInbox] = useState(false);
+  const [showSearch, setShowSearch] = useState(false);
+  const [showNewCard, setShowNewCard] = useState(false);
+  const [showListMenu, setShowListMenu] = useState(false);
+  const [showAddList, setShowAddList] = useState(false);
+  const [newListName, setNewListName] = useState('');
+  const [addingList, setAddingList] = useState(false);
 
-  // Distance-based touch sensor — explicit grip means no press-and-hold delay.
+  // ── Drag state ──────────────────────────────────────────────────────
+  const [dragOverlayCard, setDragOverlayCard] = useState<CardSummary | null>(null);
+  // Distance-based touch sensor on the grab rail (touchAction: 'none') so
+  // vertical scrolling on the card body itself doesn't trigger reorder.
   const sensors = useSensors(
     useSensor(MouseSensor, { activationConstraint: { distance: 6 } }),
     useSensor(TouchSensor, { activationConstraint: { distance: 6 } }),
@@ -126,73 +136,41 @@ export default function MobileBoardView({
     [sortedCards],
   );
 
-  const handleDragMove = useCallback(
-    (event: DragMoveEvent) => {
-      const now = Date.now();
-      if (now - lastDragOverTime.current < 16) return;
-      lastDragOverTime.current = now;
-
+  // We let SortableContext handle the visual animation, but apply the actual
+  // list update on drag end (single store mutation, no thrashing). Same-list
+  // reorder only: cross-list drag is reserved for the desktop view.
+  const handleDragEnd = useCallback(
+    async (event: DragEndEvent) => {
       const { active, over } = event;
+      setDragOverlayCard(null);
       if (!over || !activeList) return;
       const activeIdStr = active.id as string;
-      if (!activeIdStr.startsWith('mcard-')) return;
+      const overIdStr = over.id as string;
+      if (!activeIdStr.startsWith('mcard-') || !overIdStr.startsWith('mcard-')) return;
       const activeCardId = activeIdStr.slice(6);
-
-      const pointerY =
-        (event.activatorEvent as PointerEvent).clientY + event.delta.y;
-      const listEl = document.querySelector(
-        `[data-mobile-list-id="${activeList.id}"]`,
-      );
-      if (!listEl) return;
-
-      const cardEls = listEl.querySelectorAll('[data-mcard-id]');
-      let insertIndex = 0;
-      for (const el of cardEls) {
-        const elId = el.getAttribute('data-mcard-id');
-        if (elId === activeCardId) continue;
-        const rect = el.getBoundingClientRect();
-        if (pointerY > rect.top + rect.height / 2) {
-          insertIndex++;
-        } else {
-          break;
-        }
-      }
+      const overCardId = overIdStr.slice(6);
+      if (activeCardId === overCardId) return;
 
       const currentLists = useBoardStore.getState().lists;
       const list = currentLists.find((l) => l.id === activeList.id);
       if (!list) return;
-      const currentIndex = list.cards
-        .slice()
-        .sort((a, b) => a.position - b.position)
-        .findIndex((c) => c.id === activeCardId);
-      if (currentIndex === insertIndex) return;
+      const sorted = [...list.cards].sort((a, b) => a.position - b.position);
+      const newIndex = sorted.findIndex((c) => c.id === overCardId);
+      if (newIndex < 0) return;
 
-      moveCardLocally(activeCardId, activeList.id, activeList.id, insertIndex);
-    },
-    [activeList, moveCardLocally],
-  );
-
-  const handleDragEnd = useCallback(
-    async (event: DragEndEvent) => {
-      const idStr = event.active.id as string;
-      setDragOverlayCard(null);
-      if (!idStr.startsWith('mcard-')) return;
-      const cardId = idStr.slice(6);
-      const currentLists = useBoardStore.getState().lists;
-      const list = currentLists.find((l) =>
-        l.cards.some((c) => c.id === cardId),
+      const newPosition = moveCardLocally(
+        activeCardId,
+        activeList.id,
+        activeList.id,
+        newIndex,
       );
-      if (!list) return;
-      const card = list.cards.find((c) => c.id === cardId);
-      if (!card) return;
       try {
-        await moveCard(cardId, list.id, card.position);
+        await moveCard(activeCardId, activeList.id, newPosition);
       } catch {
-        const refresh = useBoardStore.getState().fetchBoard;
-        await refresh(boardId);
+        await useBoardStore.getState().fetchBoard(boardId);
       }
     },
-    [moveCard, boardId],
+    [activeList, moveCardLocally, moveCard, boardId],
   );
 
   const openCard = useCallback(
@@ -204,19 +182,49 @@ export default function MobileBoardView({
     [searchParams, setSearchParams],
   );
 
+  const cardIdFromUrl = searchParams.get('card');
+  const closeCard = useCallback(() => {
+    const next = new URLSearchParams(searchParams);
+    next.delete('card');
+    setSearchParams(next, { replace: true });
+  }, [searchParams, setSearchParams]);
+
+  const common = useCommonActions({
+    workspaceId,
+    onNotifications: () => setShowInbox(true),
+    onSearch: () => setShowSearch(true),
+  });
+
+  // The board's accent dot: defaults to backgroundValue when board uses a
+  // color background; falls back to a configurable accentColor otherwise.
+  const headerAccent = boardAccentColor(
+    board as unknown as { accentColor: string | null; backgroundType: string; backgroundValue: string } | null,
+  );
+
+  // Lock the body so window scroll never moves during drag and so the list
+  // scroll stays contained. This sidesteps the "drag resets the page to the
+  // top" bug seen when sortable updates re-layout the document.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   return (
     <div
       className="flex flex-col"
       style={{
         background: D.bg,
         color: D.ink,
-        minHeight: '100dvh',
-        fontFamily:
-          '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, sans-serif',
+        height: '100dvh',
+        fontFamily: MOBILE_FONT_STACK,
         WebkitFontSmoothing: 'antialiased',
+        overflow: 'hidden',
       }}
     >
-      {/* Top bar — restrained, board name centered with list dot */}
+      {/* Top bar — board name with board accent dot */}
       <header
         className="flex items-center px-3"
         style={{
@@ -224,6 +232,7 @@ export default function MobileBoardView({
           paddingBottom: 8,
           background: D.bg,
           borderBottom: `0.5px solid ${D.hair}`,
+          flexShrink: 0,
         }}
       >
         <button
@@ -264,10 +273,10 @@ export default function MobileBoardView({
           >
             <span
               style={{
-                width: 6,
-                height: 6,
-                borderRadius: 3,
-                background: listDot(Math.max(0, activeIndex)),
+                width: 8,
+                height: 8,
+                borderRadius: 4,
+                background: headerAccent,
                 flexShrink: 0,
               }}
             />
@@ -282,17 +291,37 @@ export default function MobileBoardView({
             </span>
           </div>
         </div>
-        <div style={{ width: 36 }} />
+        <button
+          onClick={() => activeList && setShowListMenu(true)}
+          aria-label="List menu"
+          disabled={!activeList}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            padding: 8,
+            color: activeList ? D.ink2 : D.mute2,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            cursor: activeList ? 'pointer' : 'default',
+          }}
+        >
+          <svg width="22" height="22" viewBox="0 0 24 24" fill="none">
+            <circle cx="6" cy="12" r="1.6" fill="currentColor" />
+            <circle cx="12" cy="12" r="1.6" fill="currentColor" />
+            <circle cx="18" cy="12" r="1.6" fill="currentColor" />
+          </svg>
+        </button>
       </header>
 
       {/* Sticky list-tab strip */}
       <div
-        className="sticky top-0 z-10"
         style={{
           background: D.bg,
-          paddingTop: 12,
+          paddingTop: 10,
           paddingBottom: 10,
           borderBottom: `1px solid ${D.hair}`,
+          flexShrink: 0,
         }}
       >
         <div
@@ -324,6 +353,7 @@ export default function MobileBoardView({
                   border: `0.5px solid ${on ? D.hair2 : 'transparent'}`,
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
+                  fontFamily: MOBILE_FONT_STACK,
                 }}
               >
                 <span
@@ -331,7 +361,7 @@ export default function MobileBoardView({
                     width: 7,
                     height: 7,
                     borderRadius: 4,
-                    background: listDot(i),
+                    background: listAccentColor(l, i),
                     opacity: on ? 1 : 0.7,
                   }}
                 />
@@ -339,20 +369,46 @@ export default function MobileBoardView({
               </button>
             );
           })}
+          <button
+            onClick={() => setShowAddList(true)}
+            aria-label="Add list"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 38,
+              padding: '0 0',
+              background: 'transparent',
+              color: D.mute,
+              border: `0.5px dashed ${D.hair3}`,
+              borderRadius: 10,
+              flexShrink: 0,
+              cursor: 'pointer',
+            }}
+          >
+            <svg width="14" height="14" viewBox="0 0 14 14" fill="none">
+              <path d="M7 2v10M2 7h10" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+          </button>
         </div>
       </div>
 
-      {/* Active list */}
-      {activeList ? (
-        <DndContext
-          sensors={sensors}
-          onDragStart={handleDragStart}
-          onDragMove={handleDragMove}
-          onDragEnd={handleDragEnd}
-        >
-          <div
-            className="flex-1"
-            style={{ paddingBottom: 'max(env(safe-area-inset-bottom), 24px)' }}
+      {/* Active list — separate scroll container so drag never moves window scroll */}
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          WebkitOverflowScrolling: 'touch',
+          overscrollBehaviorY: 'contain',
+          paddingBottom: 88, // clear the bottom bar
+        }}
+      >
+        {activeList ? (
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={handleDragStart}
+            onDragEnd={handleDragEnd}
           >
             <div
               className="flex items-center"
@@ -365,13 +421,30 @@ export default function MobileBoardView({
                   fontWeight: 500,
                   letterSpacing: 0.6,
                   textTransform: 'uppercase',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
                 }}
               >
+                <span
+                  style={{
+                    width: 8,
+                    height: 8,
+                    borderRadius: 4,
+                    background: listAccentColor(activeList, activeIndex),
+                  }}
+                />
                 {activeList.name}
+                <span style={{ color: D.mute2, marginLeft: 4 }}>
+                  · {sortedCards.length}
+                </span>
               </div>
             </div>
 
-            <MobileListDroppable listId={activeList.id}>
+            <SortableContext
+              items={sortedCards.map((c) => `mcard-${c.id}`)}
+              strategy={verticalListSortingStrategy}
+            >
               <div
                 data-mobile-list-id={activeList.id}
                 className="flex flex-col gap-2 px-3"
@@ -383,70 +456,164 @@ export default function MobileBoardView({
                     onOpen={() => openCard(c.id)}
                   />
                 ))}
+                {sortedCards.length === 0 && (
+                  <div
+                    style={{
+                      padding: 30,
+                      color: D.mute,
+                      textAlign: 'center',
+                      fontSize: 14,
+                    }}
+                  >
+                    No cards in this list. Tap + below to add one.
+                  </div>
+                )}
+              </div>
+            </SortableContext>
+
+            <DragOverlay dropAnimation={null}>
+              {dragOverlayCard ? (
                 <div
                   style={{
-                    marginTop: 6,
-                    background: 'transparent',
-                    border: `1px dashed ${D.hair2}`,
-                    color: D.mute,
-                    fontSize: 14,
-                    fontWeight: 500,
-                    padding: 4,
+                    background: D.surface,
+                    border: `0.5px solid ${D.sky}`,
                     borderRadius: 12,
+                    boxShadow:
+                      '0 14px 30px rgba(0,0,0,0.45), 0 0 0 1px rgba(91,168,255,0.25)',
+                    padding: '12px 14px',
+                    transform: 'rotate(-0.6deg)',
+                    color: D.ink,
+                    fontSize: 15,
+                    fontWeight: 500,
+                    letterSpacing: -0.2,
+                    maxWidth: 340,
                   }}
                 >
-                  <div className="[&_button]:!text-[color:#8A8A8A] [&_textarea]:!bg-[#141414] [&_textarea]:!text-[#F5F5F5] [&_textarea]:!border-[#2A2A2A]">
-                    <AddCard listId={activeList.id} />
-                  </div>
+                  {dragOverlayCard.name}
                 </div>
-              </div>
-            </MobileListDroppable>
+              ) : null}
+            </DragOverlay>
+          </DndContext>
+        ) : (
+          <div
+            className="flex items-center justify-center"
+            style={{ color: D.mute, fontSize: 14, padding: 60 }}
+          >
+            No lists yet — tap + to create one.
           </div>
+        )}
+      </div>
 
-          <DragOverlay dropAnimation={null}>
-            {dragOverlayCard ? (
-              <div
+      <MobileBottomBar
+        actions={[
+          common.boards(),
+          common.notifications(),
+          common.search(),
+          {
+            key: 'add',
+            label: 'New card',
+            icon: Icon.PlusCircle,
+            variant: 'primary',
+            onClick: () => activeList && setShowNewCard(true),
+          },
+          {
+            key: 'list',
+            label: 'List',
+            icon: Icon.More,
+            onClick: () => activeList && setShowListMenu(true),
+          },
+        ]}
+      />
+
+      {showInbox && <MobileNotificationsSheet onClose={() => setShowInbox(false)} />}
+      {showSearch && <MobileSearchSheet onClose={() => setShowSearch(false)} />}
+      {showNewCard && activeList && (
+        <MobileNewCard
+          listId={activeList.id}
+          listName={activeList.name}
+          onClose={() => setShowNewCard(false)}
+        />
+      )}
+      {showListMenu && activeList && (
+        <MobileListMenu
+          list={{ id: activeList.id, name: activeList.name, color: activeList.color ?? null }}
+          onClose={() => setShowListMenu(false)}
+        />
+      )}
+      {showAddList && (
+        <Sheet onClose={() => !addingList && setShowAddList(false)}>
+          <SheetHeader title="New list" />
+          <div style={{ padding: '8px 16px 16px' }}>
+            <input
+              autoFocus
+              value={newListName}
+              onChange={(e) => setNewListName(e.target.value)}
+              placeholder="List title"
+              style={{
+                width: '100%',
+                background: D.surface2,
+                color: D.ink,
+                border: `0.5px solid ${D.hair3}`,
+                borderRadius: 10,
+                padding: '12px 14px',
+                fontSize: 16,
+                fontFamily: MOBILE_FONT_STACK,
+                outline: 'none',
+              }}
+              onKeyDown={async (e) => {
+                if (e.key === 'Escape') setShowAddList(false);
+                if (e.key === 'Enter') {
+                  const n = newListName.trim();
+                  if (!n) return;
+                  setAddingList(true);
+                  try {
+                    await addList(boardId, n);
+                    setNewListName('');
+                    setShowAddList(false);
+                  } finally {
+                    setAddingList(false);
+                  }
+                }
+              }}
+            />
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button
+                disabled={!newListName.trim() || addingList}
+                onClick={async () => {
+                  const n = newListName.trim();
+                  if (!n) return;
+                  setAddingList(true);
+                  try {
+                    await addList(boardId, n);
+                    setNewListName('');
+                    setShowAddList(false);
+                  } finally {
+                    setAddingList(false);
+                  }
+                }}
                 style={{
-                  background: D.surface,
-                  border: `0.5px solid ${D.sky}`,
-                  borderRadius: 12,
-                  boxShadow:
-                    '0 14px 30px rgba(0,0,0,0.45), 0 0 0 1px rgba(91,168,255,0.25)',
-                  padding: '12px 14px',
-                  transform: 'rotate(-0.6deg)',
-                  color: D.ink,
+                  flex: 1,
+                  background: newListName.trim() ? D.sky : D.surface2,
+                  color: newListName.trim() ? '#0A0A0A' : D.mute,
+                  border: 'none',
+                  borderRadius: 10,
+                  padding: '12px 0',
                   fontSize: 15,
-                  fontWeight: 500,
-                  letterSpacing: -0.2,
-                  maxWidth: 340,
+                  fontWeight: 600,
+                  cursor: newListName.trim() ? 'pointer' : 'default',
+                  fontFamily: MOBILE_FONT_STACK,
                 }}
               >
-                {dragOverlayCard.name}
-              </div>
-            ) : null}
-          </DragOverlay>
-        </DndContext>
-      ) : (
-        <div
-          className="flex-1 flex items-center justify-center"
-          style={{ color: D.mute, fontSize: 14 }}
-        >
-          No lists yet
-        </div>
+                {addingList ? 'Creating…' : 'Create'}
+              </button>
+            </div>
+          </div>
+          <CancelRow onClick={() => setShowAddList(false)} />
+        </Sheet>
       )}
+      {cardIdFromUrl && <MobileCardSheet cardId={cardIdFromUrl} onClose={closeCard} />}
     </div>
   );
-}
-
-function MobileListDroppable({
-  listId,
-  children,
-}: {
-  listId: string;
-  children: React.ReactNode;
-}) {
-  const { setNodeRef } = useDroppable({ id: `mlist-${listId}` });
-  return <div ref={setNodeRef}>{children}</div>;
 }
 
 interface MobileCardProps {
@@ -466,25 +633,32 @@ function MobileCard({ card, onOpen }: MobileCardProps) {
     [members, card.memberIds],
   );
 
-  const { attributes, listeners, setNodeRef, isDragging, setActivatorNodeRef } =
-    useDraggable({
-      id: `mcard-${card.id}`,
-      data: { type: 'card', card, listId: card.listId },
-    });
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({
+    id: `mcard-${card.id}`,
+    data: { type: 'card', card, listId: card.listId },
+  });
+
+  const style: React.CSSProperties = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    display: 'flex',
+    background: D.surface,
+    borderRadius: 12,
+    border: `0.5px solid ${isDragging ? D.sky : D.hair}`,
+    overflow: 'hidden',
+    opacity: isDragging ? 0.35 : 1,
+  };
 
   return (
-    <div
-      ref={setNodeRef}
-      data-mcard-id={card.id}
-      style={{
-        display: 'flex',
-        background: D.surface,
-        borderRadius: 12,
-        border: `0.5px solid ${D.hair}`,
-        overflow: 'hidden',
-        opacity: isDragging ? 0 : 1,
-      }}
-    >
+    <div ref={setNodeRef} data-mcard-id={card.id} style={style}>
       {/* DRAG RAIL — the only drag affordance */}
       <div
         ref={setActivatorNodeRef}
@@ -515,7 +689,7 @@ function MobileCard({ card, onOpen }: MobileCardProps) {
         </svg>
       </div>
 
-      {/* Card body — tap to open, scroll passes through */}
+      {/* Card body — tap to open */}
       <button
         type="button"
         onClick={onOpen}
@@ -528,6 +702,7 @@ function MobileCard({ card, onOpen }: MobileCardProps) {
           color: D.ink,
           cursor: 'pointer',
           minWidth: 0,
+          fontFamily: MOBILE_FONT_STACK,
         }}
       >
         {card.coverAttachmentId && (
@@ -596,7 +771,7 @@ function MobileCard({ card, onOpen }: MobileCardProps) {
                   color:
                     card.checklistItems.checked === card.checklistItems.total &&
                     card.checklistItems.total > 0
-                      ? D.lime
+                      ? MOBILE_PALETTE[3]
                       : D.mute,
                 }}
               >
@@ -613,13 +788,7 @@ function MobileCard({ card, onOpen }: MobileCardProps) {
               </span>
             )}
             {card.attachmentCount > 0 && (
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-              >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <svg width="11" height="11" viewBox="0 0 12 12" fill="none">
                   <path
                     d="M10 3.5L5.5 8a2 2 0 01-2.8-2.8L7 .9a3 3 0 014.2 4.2L7 9.4"
@@ -633,13 +802,7 @@ function MobileCard({ card, onOpen }: MobileCardProps) {
               </span>
             )}
             {card.commentCount > 0 && (
-              <span
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-              >
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                 <svg width="12" height="11" viewBox="0 0 13 12" fill="none">
                   <path
                     d="M1 5.5C1 2.8 3.3 1 6.5 1S12 2.8 12 5.5 9.7 10 6.5 10c-.7 0-1.4-.1-2-.3L2 11l.7-2.3C1.6 7.8 1 6.7 1 5.5z"
@@ -652,14 +815,7 @@ function MobileCard({ card, onOpen }: MobileCardProps) {
               </span>
             )}
             {card.description && (
-              <span
-                aria-label="Has description"
-                style={{
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-              >
+              <span aria-label="Has description" style={{ display: 'inline-flex', alignItems: 'center' }}>
                 <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                   <path
                     d="M2 3h8M2 6h8M2 9h5"
@@ -697,11 +853,7 @@ function MobileCard({ card, onOpen }: MobileCardProps) {
                       <img
                         src={m.avatarUrl}
                         alt={m.displayName}
-                        style={{
-                          width: '100%',
-                          height: '100%',
-                          objectFit: 'cover',
-                        }}
+                        style={{ width: '100%', height: '100%', objectFit: 'cover' }}
                       />
                     ) : (
                       m.displayName.charAt(0).toUpperCase()

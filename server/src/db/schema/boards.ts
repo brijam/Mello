@@ -9,6 +9,7 @@ export const boards = pgTable('boards', {
   description: text('description'),
   backgroundType: varchar('background_type', { length: 20 }).default('color').notNull().$type<'color' | 'image'>(),
   backgroundValue: text('background_value').default('#0079bf').notNull(),
+  accentColor: varchar('accent_color', { length: 20 }),
   isTemplate: boolean('is_template').default(false).notNull(),
   position: doublePrecision('position').notNull(),
   createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),

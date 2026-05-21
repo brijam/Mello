@@ -218,7 +218,7 @@ export async function listRoutes(app: FastifyInstance) {
     preHandler: [requireAuth, requireBoardRole('admin', 'normal'), validateBody(createListSchema)],
   }, async (request, reply) => {
     const { boardId } = request.params as { boardId: string };
-    const { name, position } = request.body as { name: string; position?: number };
+    const { name, color, position } = request.body as { name: string; color?: string | null; position?: number };
 
     let pos = position;
     if (pos === undefined) {
@@ -232,6 +232,7 @@ export async function listRoutes(app: FastifyInstance) {
     const [list] = await db.insert(lists).values({
       boardId,
       name,
+      color: color ?? null,
       position: pos,
     }).returning();
 
@@ -244,7 +245,7 @@ export async function listRoutes(app: FastifyInstance) {
     preHandler: [requireAuth, validateBody(updateListSchema)],
   }, async (request) => {
     const { listId } = request.params as { listId: string };
-    const body = request.body as { name?: string; position?: number };
+    const body = request.body as { name?: string; color?: string | null; position?: number };
 
     const [list] = await db
       .update(lists)
