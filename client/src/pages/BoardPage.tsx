@@ -86,11 +86,16 @@ export default function BoardPage() {
   // Drop indicator element (DOM-based for zero re-render cost)
   const dropIndicatorRef = useRef<HTMLDivElement | null>(null);
 
-  // Create drop indicator element once
+  // Create drop indicator element once. It's a fixed-position overlay so its
+  // viewport Y can follow the pointer regardless of any list's scroll state —
+  // sibling-based placement (.before/.after) hides the indicator when its
+  // anchor card is scrolled out of view.
   useEffect(() => {
     const el = document.createElement('div');
     el.className = 'drop-indicator';
-    el.style.cssText = 'height: 3px; background: #3b82f6; border-radius: 3px; margin: 2px 4px; display: none; transition: opacity 0.15s;';
+    el.style.cssText =
+      'position: fixed; height: 3px; background: #3b82f6; border-radius: 3px; display: none; pointer-events: none; z-index: 60;';
+    document.body.appendChild(el);
     dropIndicatorRef.current = el;
     return () => {
       el.remove();
@@ -289,9 +294,17 @@ export default function BoardPage() {
       }
       if (!fromListId) return;
 
-      // Calculate insertion index from pointer position
-      const pointerY = (event.activatorEvent as PointerEvent).clientY + event.delta.y;
-      const listEl = document.querySelector(`[data-list-id="${overListId}"]`);
+      // Current pointer Y in viewport coords. Touch events expose Y via
+      // touches[0].clientY rather than clientY directly, so handle both.
+      const ae = event.activatorEvent as MouseEvent | TouchEvent | PointerEvent;
+      const startY =
+        'clientY' in ae && typeof (ae as MouseEvent).clientY === 'number'
+          ? (ae as MouseEvent).clientY
+          : (ae as TouchEvent).touches?.[0]?.clientY;
+      if (typeof startY !== 'number') return;
+      const pointerY = startY + event.delta.y;
+
+      const listEl = document.querySelector(`[data-list-id="${overListId}"]`) as HTMLElement | null;
       let insertIndex = 0;
       if (listEl) {
         const cardEls = listEl.querySelectorAll('[data-card-id]');
@@ -307,23 +320,19 @@ export default function BoardPage() {
         }
       }
 
-      // Position the drop indicator
+      // Position the indicator at the pointer's Y level, clamped to the
+      // list's visible scroll viewport so it never disappears above/below
+      // when cards are scrolled off-screen.
       if (dropIndicatorRef.current && listEl) {
         const indicator = dropIndicatorRef.current;
-        const cardEls = Array.from(listEl.querySelectorAll('[data-card-id]'));
-        // Build list of non-dragged card elements
-        const visibleCards = cardEls.filter(el => el.getAttribute('data-card-id') !== activeCardId);
-        if (insertIndex < visibleCards.length) {
-          visibleCards[insertIndex].before(indicator);
-        } else {
-          // After the last card (but before AddCard)
-          const lastCard = cardEls[cardEls.length - 1];
-          if (lastCard) {
-            lastCard.after(indicator);
-          } else {
-            listEl.prepend(indicator);
-          }
-        }
+        const listRect = listEl.getBoundingClientRect();
+        const clampedY = Math.max(
+          listRect.top + 2,
+          Math.min(listRect.bottom - 2, pointerY),
+        );
+        indicator.style.top = `${clampedY - 1.5}px`;
+        indicator.style.left = `${listRect.left + 8}px`;
+        indicator.style.width = `${Math.max(0, listRect.width - 16)}px`;
         indicator.style.display = 'block';
       }
 
