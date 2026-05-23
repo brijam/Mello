@@ -19,10 +19,6 @@ interface MobileBottomBarProps {
   actions: BottomBarAction[];
 }
 
-// Approximate visible height of the bottom bar including safe-area inset on
-// iOS. Used by overlays (inbox/search) so they don't sit on top of the bar.
-export const MOBILE_BOTTOM_BAR_HEIGHT = 88;
-
 export default function MobileBottomBar({ actions }: MobileBottomBarProps) {
   return (
     <nav

@@ -4,7 +4,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSearchStore } from '../../stores/searchStore.js';
-import { MOBILE_BOTTOM_BAR_HEIGHT } from './MobileBottomBar.js';
 import { D, MOBILE_FONT_STACK } from './mobileTheme.js';
 
 interface MobileSearchSheetProps {
@@ -38,13 +37,10 @@ export default function MobileSearchSheet({ onClose }: MobileSearchSheetProps) {
     <div
       style={{
         position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: MOBILE_BOTTOM_BAR_HEIGHT,
+        inset: 0,
         background: D.bg,
         color: D.ink,
-        zIndex: 20,
+        zIndex: 50,
         fontFamily: MOBILE_FONT_STACK,
         display: 'flex',
         flexDirection: 'column',
@@ -118,6 +114,22 @@ export default function MobileSearchSheet({ onClose }: MobileSearchSheetProps) {
             </button>
           )}
         </div>
+        <button
+          onClick={onClose}
+          style={{
+            background: 'transparent',
+            border: 'none',
+            color: D.sky,
+            padding: '8px 4px',
+            fontSize: 15,
+            fontWeight: 500,
+            cursor: 'pointer',
+            fontFamily: MOBILE_FONT_STACK,
+            flexShrink: 0,
+          }}
+        >
+          Cancel
+        </button>
       </header>
 
       <div style={{ flex: 1, overflowY: 'auto' }}>

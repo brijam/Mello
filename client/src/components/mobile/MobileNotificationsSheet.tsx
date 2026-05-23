@@ -4,7 +4,6 @@
 import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useNotificationStore, type Notification } from '../../stores/notificationStore.js';
-import { MOBILE_BOTTOM_BAR_HEIGHT } from './MobileBottomBar.js';
 import { D, MOBILE_FONT_STACK } from './mobileTheme.js';
 
 interface MobileNotificationsSheetProps {
@@ -28,13 +27,10 @@ export default function MobileNotificationsSheet({ onClose }: MobileNotification
     <div
       style={{
         position: 'fixed',
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: MOBILE_BOTTOM_BAR_HEIGHT,
+        inset: 0,
         background: D.bg,
         color: D.ink,
-        zIndex: 20,
+        zIndex: 50,
         fontFamily: MOBILE_FONT_STACK,
         display: 'flex',
         flexDirection: 'column',
@@ -42,30 +38,48 @@ export default function MobileNotificationsSheet({ onClose }: MobileNotification
     >
       <header
         style={{
-          display: 'flex',
+          display: 'grid',
+          gridTemplateColumns: '1fr auto 1fr',
           alignItems: 'center',
-          justifyContent: 'space-between',
           paddingTop: 'max(env(safe-area-inset-top), 10px)',
           paddingBottom: 10,
-          paddingLeft: 16,
+          paddingLeft: 12,
           paddingRight: 12,
           borderBottom: `0.5px solid ${D.hair}`,
         }}
       >
-        <div style={{ fontSize: 16, fontWeight: 600 }}>Inbox</div>
         <button
           disabled={unreadCount === 0}
           onClick={markAllRead}
           style={{
+            justifySelf: 'start',
             background: 'transparent',
             border: 'none',
             color: unreadCount > 0 ? D.sky : D.mute2,
             padding: 8,
             fontSize: 14,
             cursor: unreadCount > 0 ? 'pointer' : 'default',
+            fontFamily: MOBILE_FONT_STACK,
           }}
         >
           Mark all
+        </button>
+        <div style={{ fontSize: 16, fontWeight: 600 }}>Inbox</div>
+        <button
+          onClick={onClose}
+          style={{
+            justifySelf: 'end',
+            background: 'transparent',
+            border: 'none',
+            color: D.sky,
+            padding: 8,
+            fontSize: 15,
+            fontWeight: 600,
+            cursor: 'pointer',
+            fontFamily: MOBILE_FONT_STACK,
+          }}
+        >
+          Done
         </button>
       </header>
 

@@ -10,6 +10,13 @@ import MarkdownRenderer from '../card/MarkdownRenderer.js';
 import { D, MOBILE_FONT_STACK } from './mobileTheme.js';
 import { Sheet, SheetHeader, ActionRow, CancelRow, Divider } from './MobileListMenu.js';
 
+interface CardAttachment {
+  id: string;
+  filename: string;
+  mimeType: string;
+  sizeBytes?: number;
+}
+
 interface CardDetailData {
   id: string;
   listId: string;
@@ -25,7 +32,7 @@ interface CardDetailData {
     position: number;
     items: { id: string; name: string; checked: boolean; position: number }[];
   }[];
-  attachments: { id: string; filename: string; mimeType: string }[];
+  attachments: CardAttachment[];
   commentCount: number;
   isTemplate: boolean;
   coverAttachmentId: string | null;
@@ -47,6 +54,10 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
   const [descValue, setDescValue] = useState('');
 
   const [section, setSection] = useState<'main' | 'labels' | 'members' | 'list' | 'menu'>('main');
+
+  const [uploading, setUploading] = useState(false);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const lists = useBoardStore((s) => s.lists);
   const labels = useBoardStore((s) => s.labels);
@@ -80,6 +91,63 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
       cancelled = true;
     };
   }, [cardId]);
+
+  async function refreshAttachments() {
+    try {
+      const data = await api.get<{ card: CardDetailData }>(`/cards/${cardId}`);
+      setCard((prev) =>
+        prev
+          ? {
+              ...prev,
+              attachments: data.card.attachments,
+              coverAttachmentId: data.card.coverAttachmentId,
+            }
+          : data.card,
+      );
+    } catch {
+      // surfaced through attachmentError on the action that triggered it
+    }
+  }
+
+  async function uploadFile(file: File) {
+    setUploading(true);
+    setAttachmentError(null);
+    try {
+      const formData = new FormData();
+      formData.append('file', file);
+      const res = await fetch(`/api/v1/cards/${cardId}/attachments`, {
+        method: 'POST',
+        credentials: 'include',
+        body: formData,
+      });
+      if (!res.ok) {
+        const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+        throw new Error(data.error?.message || 'Upload failed');
+      }
+      await refreshAttachments();
+    } catch (err) {
+      setAttachmentError(err instanceof Error ? err.message : 'Upload failed');
+    } finally {
+      setUploading(false);
+    }
+  }
+
+  async function deleteAttachment(attachmentId: string) {
+    setAttachmentError(null);
+    try {
+      const res = await fetch(`/api/v1/attachments/${attachmentId}`, {
+        method: 'DELETE',
+        credentials: 'include',
+      });
+      if (!res.ok && res.status !== 204) {
+        const data = (await res.json().catch(() => ({}))) as { error?: { message?: string } };
+        throw new Error(data.error?.message || 'Delete failed');
+      }
+      await refreshAttachments();
+    } catch (err) {
+      setAttachmentError(err instanceof Error ? err.message : 'Delete failed');
+    }
+  }
 
   useEffect(() => {
     if (editingTitle) titleRef.current?.focus();
@@ -552,41 +620,173 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
           )}
 
           {/* Attachments */}
-          {card.attachments.length > 0 && (
-            <div style={{ padding: '12px 18px 8px' }}>
-              <div
+          <div style={{ padding: '12px 18px 8px' }}>
+            <div
+              style={{
+                fontSize: 12,
+                color: D.mute,
+                fontWeight: 500,
+                letterSpacing: 0.4,
+                textTransform: 'uppercase',
+                marginBottom: 8,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+              }}
+            >
+              <span>Attachments</span>
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                disabled={uploading}
                 style={{
-                  fontSize: 12,
-                  color: D.mute,
+                  background: 'transparent',
+                  border: 'none',
+                  color: uploading ? D.mute : D.sky,
+                  fontSize: 13,
                   fontWeight: 500,
-                  letterSpacing: 0.4,
-                  textTransform: 'uppercase',
-                  marginBottom: 8,
+                  cursor: uploading ? 'default' : 'pointer',
+                  fontFamily: MOBILE_FONT_STACK,
                 }}
               >
-                Attachments
-              </div>
-              {card.attachments.map((a) => (
-                <div
-                  key={a.id}
-                  style={{
-                    background: D.surface,
-                    border: `0.5px solid ${D.hair2}`,
-                    borderRadius: 10,
-                    padding: '10px 12px',
-                    marginBottom: 6,
-                    fontSize: 14,
-                    color: D.ink2,
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                    whiteSpace: 'nowrap',
-                  }}
-                >
-                  {a.filename}
-                </div>
-              ))}
+                {uploading ? 'Uploading…' : '+ Add'}
+              </button>
             </div>
-          )}
+            <input
+              ref={fileInputRef}
+              type="file"
+              style={{ display: 'none' }}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void uploadFile(f);
+                e.target.value = '';
+              }}
+            />
+            {attachmentError && (
+              <div
+                style={{
+                  background: 'rgba(255,91,91,0.1)',
+                  border: `0.5px solid ${D.danger}`,
+                  color: D.danger,
+                  borderRadius: 10,
+                  padding: '8px 12px',
+                  marginBottom: 8,
+                  fontSize: 13,
+                }}
+              >
+                {attachmentError}
+              </div>
+            )}
+            {card.attachments.length === 0 && !uploading ? (
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                style={{
+                  width: '100%',
+                  background: D.surface,
+                  border: `0.5px dashed ${D.hair3}`,
+                  borderRadius: 10,
+                  padding: 14,
+                  color: D.mute,
+                  fontSize: 14,
+                  cursor: 'pointer',
+                  fontFamily: MOBILE_FONT_STACK,
+                  textAlign: 'center',
+                }}
+              >
+                Tap to add an attachment
+              </button>
+            ) : (
+              card.attachments.map((a) => {
+                const isImage = a.mimeType.startsWith('image/');
+                return (
+                  <div
+                    key={a.id}
+                    style={{
+                      background: D.surface,
+                      border: `0.5px solid ${D.hair2}`,
+                      borderRadius: 10,
+                      padding: '10px 12px',
+                      marginBottom: 6,
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 10,
+                    }}
+                  >
+                    <div
+                      style={{
+                        width: 36,
+                        height: 36,
+                        borderRadius: 8,
+                        background: D.surface2,
+                        overflow: 'hidden',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        flexShrink: 0,
+                        color: D.mute,
+                      }}
+                    >
+                      {isImage ? (
+                        <img
+                          src={`/api/v1/attachments/${a.id}/download`}
+                          alt={a.filename}
+                          style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+                        />
+                      ) : (
+                        <svg width="18" height="18" viewBox="0 0 24 24" fill="none">
+                          <path
+                            d="M7 21h10a2 2 0 002-2V9.4a1 1 0 00-.3-.7l-5.4-5.4a1 1 0 00-.7-.3H7a2 2 0 00-2 2v14a2 2 0 002 2z"
+                            stroke="currentColor"
+                            strokeWidth="1.5"
+                            strokeLinejoin="round"
+                          />
+                        </svg>
+                      )}
+                    </div>
+                    <a
+                      href={`/api/v1/attachments/${a.id}/download`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      style={{
+                        flex: 1,
+                        minWidth: 0,
+                        fontSize: 14,
+                        color: D.ink2,
+                        textDecoration: 'none',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {a.filename}
+                    </a>
+                    <button
+                      onClick={() => deleteAttachment(a.id)}
+                      aria-label={`Delete ${a.filename}`}
+                      style={{
+                        background: 'transparent',
+                        border: 'none',
+                        color: D.mute,
+                        padding: 6,
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                      }}
+                    >
+                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none">
+                        <path
+                          d="M5 7h14M9 7V5a1 1 0 011-1h4a1 1 0 011 1v2M7 7l1 12a2 2 0 002 2h4a2 2 0 002-2l1-12"
+                          stroke="currentColor"
+                          strokeWidth="1.6"
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                        />
+                      </svg>
+                    </button>
+                  </div>
+                );
+              })
+            )}
+          </div>
 
           {/* Comment count footer */}
           <div style={{ padding: '14px 18px 32px', color: D.mute, fontSize: 13 }}>

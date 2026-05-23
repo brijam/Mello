@@ -3,7 +3,7 @@
 install:
 	npm install
 
-dev-server:
+dev-server: migrate
 	npm run dev:server
 
 dev-client:
