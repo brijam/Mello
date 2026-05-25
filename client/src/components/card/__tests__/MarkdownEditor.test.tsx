@@ -57,6 +57,38 @@ describe('MarkdownEditor', () => {
     expect(onChange).toHaveBeenCalledWith('- item one');
   });
 
+  it('un-bolds when the selection is already wrapped in ** markers', () => {
+    const { onChange } = renderEditor({ value: '**hello** world' });
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    textarea.setSelectionRange(0, 9); // select "**hello**"
+    fireEvent.click(screen.getByRole('button', { name: /Bold/ }));
+    expect(onChange).toHaveBeenCalledWith('hello world');
+  });
+
+  it('un-bolds when ** markers surround (but are outside) the selection', () => {
+    const { onChange } = renderEditor({ value: '**hello** world' });
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    textarea.setSelectionRange(2, 7); // select just "hello"
+    fireEvent.click(screen.getByRole('button', { name: /Bold/ }));
+    expect(onChange).toHaveBeenCalledWith('hello world');
+  });
+
+  it('nests italic inside bold rather than eating an asterisk', () => {
+    const { onChange } = renderEditor({ value: '**bold**' });
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    textarea.setSelectionRange(2, 6); // select "bold" inside **bold**
+    fireEvent.click(screen.getByRole('button', { name: /Italic/ }));
+    expect(onChange).toHaveBeenCalledWith('***bold***');
+  });
+
+  it('removes the bullet prefix when the line already has one', () => {
+    const { onChange } = renderEditor({ value: '- item one' });
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    textarea.setSelectionRange(0, 0);
+    fireEvent.click(screen.getByRole('button', { name: /Bulleted list/ }));
+    expect(onChange).toHaveBeenCalledWith('item one');
+  });
+
   it('inserts underline HTML tags around the selection', () => {
     const { onChange } = renderEditor({ value: 'abc' });
     const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;

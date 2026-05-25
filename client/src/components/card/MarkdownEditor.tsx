@@ -76,40 +76,89 @@ export default function MarkdownEditor({
     }
   };
 
-  /** Wrap the current selection with `before`/`after`, then restore selection. */
+  function applyChange(next: string, selStart: number, selEnd: number) {
+    onChange(next);
+    const ta = textareaRef.current;
+    requestAnimationFrame(() => {
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(selStart, selEnd);
+    });
+  }
+
+  /**
+   * Toggle `before`/`after` markers around the selection: wrap if not present,
+   * unwrap if the selection already carries them (either inside the selection
+   * or immediately surrounding it).
+   */
   function surround(before: string, after: string) {
     const ta = textareaRef.current;
     if (!ta) return;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
-    const selected = value.slice(start, end);
-    const next = value.slice(0, start) + before + selected + after + value.slice(end);
-    onChange(next);
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(start + before.length, end + before.length);
-    });
+    const sel = value.slice(start, end);
+    const mc = before[0]; // marker char, e.g. "*" — used to avoid matching a longer run
+
+    // Markers are part of the selection itself, e.g. "**bold**" selected.
+    // Guard: don't treat "*" as italic-wrapped when it's really "**" (bold).
+    if (
+      sel.length >= before.length + after.length &&
+      sel.startsWith(before) &&
+      sel.endsWith(after) &&
+      sel[before.length] !== mc &&
+      sel[sel.length - after.length - 1] !== mc
+    ) {
+      const inner = sel.slice(before.length, sel.length - after.length);
+      applyChange(value.slice(0, start) + inner + value.slice(end), start, start + inner.length);
+      return;
+    }
+    // Markers sit just outside the selection, e.g. **[bold]** with "bold" selected.
+    // Guard: the char just beyond each marker must not be the same marker char,
+    // so toggling italic inside "**bold**" nests it rather than eating one "*".
+    if (
+      value.slice(start - before.length, start) === before &&
+      value.slice(end, end + after.length) === after &&
+      value[start - before.length - 1] !== mc &&
+      value[end + after.length] !== mc
+    ) {
+      applyChange(
+        value.slice(0, start - before.length) + sel + value.slice(end + after.length),
+        start - before.length,
+        end - before.length,
+      );
+      return;
+    }
+    // Otherwise wrap.
+    applyChange(
+      value.slice(0, start) + before + sel + after + value.slice(end),
+      start + before.length,
+      end + before.length,
+    );
   }
 
-  /** Prepend `prefix` to every line touched by the current selection. */
+  /**
+   * Toggle a line prefix (e.g. "- " or "> ") across every line in the selection:
+   * remove it if all selected lines already have it, otherwise add it.
+   */
   function prefixLines(prefix: string) {
     const ta = textareaRef.current;
     if (!ta) return;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
     const lineStart = value.lastIndexOf('\n', start - 1) + 1;
-    const block = value.slice(lineStart, end);
-    const prefixed = block
-      .split('\n')
-      .map((l) => prefix + l)
+    const nlAfter = value.indexOf('\n', end);
+    const lineEnd = nlAfter === -1 ? value.length : nlAfter;
+    const block = value.slice(lineStart, lineEnd);
+    const lines = block.split('\n');
+    const allPrefixed = lines.every((l) => l.startsWith(prefix));
+    const out = lines
+      .map((l) => (allPrefixed ? l.slice(prefix.length) : l.startsWith(prefix) ? l : prefix + l))
       .join('\n');
-    const next = value.slice(0, lineStart) + prefixed + value.slice(end);
-    onChange(next);
-    const added = prefixed.length - block.length;
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(start + prefix.length, end + added);
-    });
+    applyChange(
+      value.slice(0, lineStart) + out + value.slice(lineEnd),
+      lineStart,
+      lineEnd + (out.length - block.length),
+    );
   }
 
   const tools: { key: string; title: string; glyph: ReactNode; action: () => void }[] = [

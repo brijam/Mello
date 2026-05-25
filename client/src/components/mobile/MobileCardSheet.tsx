@@ -187,36 +187,75 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
     setEditingDesc(false);
   }
 
-  /** Wrap the current textarea selection with markdown markers. */
+  function applyDescChange(next: string, selStart: number, selEnd: number) {
+    setDescValue(next);
+    const ta = descRef.current;
+    requestAnimationFrame(() => {
+      if (!ta) return;
+      ta.focus();
+      ta.setSelectionRange(selStart, selEnd);
+    });
+  }
+
+  /** Toggle markdown markers around the selection (wrap, or unwrap if already applied). */
   function surroundDesc(before: string, after: string) {
     const ta = descRef.current;
     if (!ta) return;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
-    const next = descValue.slice(0, start) + before + descValue.slice(start, end) + after + descValue.slice(end);
-    setDescValue(next);
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(start + before.length, end + before.length);
-    });
+    const sel = descValue.slice(start, end);
+    const mc = before[0]; // marker char — avoid matching a longer run (e.g. "*" vs "**")
+    if (
+      sel.length >= before.length + after.length &&
+      sel.startsWith(before) &&
+      sel.endsWith(after) &&
+      sel[before.length] !== mc &&
+      sel[sel.length - after.length - 1] !== mc
+    ) {
+      const inner = sel.slice(before.length, sel.length - after.length);
+      applyDescChange(descValue.slice(0, start) + inner + descValue.slice(end), start, start + inner.length);
+      return;
+    }
+    if (
+      descValue.slice(start - before.length, start) === before &&
+      descValue.slice(end, end + after.length) === after &&
+      descValue[start - before.length - 1] !== mc &&
+      descValue[end + after.length] !== mc
+    ) {
+      applyDescChange(
+        descValue.slice(0, start - before.length) + sel + descValue.slice(end + after.length),
+        start - before.length,
+        end - before.length,
+      );
+      return;
+    }
+    applyDescChange(
+      descValue.slice(0, start) + before + sel + after + descValue.slice(end),
+      start + before.length,
+      end + before.length,
+    );
   }
 
-  /** Prepend a prefix to every line touched by the selection. */
+  /** Toggle a line prefix across the selected lines (add, or remove if all already have it). */
   function prefixDescLines(prefix: string) {
     const ta = descRef.current;
     if (!ta) return;
     const start = ta.selectionStart;
     const end = ta.selectionEnd;
     const lineStart = descValue.lastIndexOf('\n', start - 1) + 1;
-    const block = descValue.slice(lineStart, end);
-    const prefixed = block.split('\n').map((l) => prefix + l).join('\n');
-    const next = descValue.slice(0, lineStart) + prefixed + descValue.slice(end);
-    setDescValue(next);
-    const added = prefixed.length - block.length;
-    requestAnimationFrame(() => {
-      ta.focus();
-      ta.setSelectionRange(start + prefix.length, end + added);
-    });
+    const nlAfter = descValue.indexOf('\n', end);
+    const lineEnd = nlAfter === -1 ? descValue.length : nlAfter;
+    const block = descValue.slice(lineStart, lineEnd);
+    const lines = block.split('\n');
+    const allPrefixed = lines.every((l) => l.startsWith(prefix));
+    const out = lines
+      .map((l) => (allPrefixed ? l.slice(prefix.length) : l.startsWith(prefix) ? l : prefix + l))
+      .join('\n');
+    applyDescChange(
+      descValue.slice(0, lineStart) + out + descValue.slice(lineEnd),
+      lineStart,
+      lineEnd + (out.length - block.length),
+    );
   }
 
   async function moveToList(targetListId: string) {
