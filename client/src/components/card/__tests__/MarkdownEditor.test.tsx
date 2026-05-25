@@ -41,6 +41,36 @@ describe('MarkdownEditor', () => {
     expect(screen.getByText('Bullet list')).toBeInTheDocument();
   });
 
+  it('wraps the selected text in bold markers when the Bold button is clicked', () => {
+    const { onChange } = renderEditor({ value: 'hello world' });
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    textarea.setSelectionRange(0, 5); // select "hello"
+    fireEvent.click(screen.getByRole('button', { name: /Bold/ }));
+    expect(onChange).toHaveBeenCalledWith('**hello** world');
+  });
+
+  it('prefixes the current line with a bullet when the bulleted-list button is clicked', () => {
+    const { onChange } = renderEditor({ value: 'item one' });
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    textarea.setSelectionRange(0, 0);
+    fireEvent.click(screen.getByRole('button', { name: /Bulleted list/ }));
+    expect(onChange).toHaveBeenCalledWith('- item one');
+  });
+
+  it('inserts underline HTML tags around the selection', () => {
+    const { onChange } = renderEditor({ value: 'abc' });
+    const textarea = screen.getByRole('textbox') as HTMLTextAreaElement;
+    textarea.setSelectionRange(0, 3);
+    fireEvent.click(screen.getByRole('button', { name: /Underline/ }));
+    expect(onChange).toHaveBeenCalledWith('<u>abc</u>');
+  });
+
+  it('hides the formatting toolbar on the Preview tab', () => {
+    renderEditor();
+    fireEvent.click(screen.getByRole('button', { name: 'Preview' }));
+    expect(screen.queryByRole('button', { name: /Bold/ })).not.toBeInTheDocument();
+  });
+
   it('renders MarkdownRenderer with the current value when Preview is selected', () => {
     renderEditor({ value: 'hello world' });
     fireEvent.click(screen.getByRole('button', { name: 'Preview' }));

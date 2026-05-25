@@ -187,6 +187,38 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
     setEditingDesc(false);
   }
 
+  /** Wrap the current textarea selection with markdown markers. */
+  function surroundDesc(before: string, after: string) {
+    const ta = descRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const next = descValue.slice(0, start) + before + descValue.slice(start, end) + after + descValue.slice(end);
+    setDescValue(next);
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(start + before.length, end + before.length);
+    });
+  }
+
+  /** Prepend a prefix to every line touched by the selection. */
+  function prefixDescLines(prefix: string) {
+    const ta = descRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const lineStart = descValue.lastIndexOf('\n', start - 1) + 1;
+    const block = descValue.slice(lineStart, end);
+    const prefixed = block.split('\n').map((l) => prefix + l).join('\n');
+    const next = descValue.slice(0, lineStart) + prefixed + descValue.slice(end);
+    setDescValue(next);
+    const added = prefixed.length - block.length;
+    requestAnimationFrame(() => {
+      ta.focus();
+      ta.setSelectionRange(start + prefix.length, end + added);
+    });
+  }
+
   async function moveToList(targetListId: string) {
     if (!card || targetListId === card.listId) {
       setSection('main');
@@ -558,6 +590,41 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
                           {label}
                         </span>
                       </div>
+                    ))}
+                  </div>
+                )}
+                {descTab === 'write' && (
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 2, marginBottom: 8 }}>
+                    {([
+                      { key: 'bold', node: <span style={{ fontWeight: 700 }}>B</span>, action: () => surroundDesc('**', '**') },
+                      { key: 'underline', node: <span style={{ textDecoration: 'underline' }}>U</span>, action: () => surroundDesc('<u>', '</u>') },
+                      { key: 'italic', node: <span style={{ fontStyle: 'italic' }}>I</span>, action: () => surroundDesc('*', '*') },
+                      { key: 'strike', node: <span style={{ textDecoration: 'line-through' }}>S</span>, action: () => surroundDesc('~~', '~~') },
+                      { key: 'ul', node: <span>•</span>, action: () => prefixDescLines('- ') },
+                      { key: 'code', node: <span style={{ fontFamily: 'monospace' }}>{'<>'}</span>, action: () => surroundDesc('`', '`') },
+                      { key: 'quote', node: <span>"</span>, action: () => prefixDescLines('> ') },
+                    ] as const).map((t) => (
+                      <button
+                        key={t.key}
+                        onMouseDown={(e) => e.preventDefault()}
+                        onClick={t.action}
+                        style={{
+                          width: 32,
+                          height: 30,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          background: D.surface2,
+                          color: D.ink2,
+                          border: `0.5px solid ${D.hair2}`,
+                          borderRadius: 8,
+                          fontSize: 14,
+                          cursor: 'pointer',
+                          fontFamily: MOBILE_FONT_STACK,
+                        }}
+                      >
+                        {t.node}
+                      </button>
                     ))}
                   </div>
                 )}
