@@ -3,6 +3,7 @@ import { api } from '../../api/client.js';
 import { useBoardStore } from '../../stores/boardStore.js';
 import { useAuthStore } from '../../stores/authStore.js';
 import MarkdownRenderer from './MarkdownRenderer.js';
+import MarkdownEditor from './MarkdownEditor.js';
 import LabelPicker from './LabelPicker.js';
 import MemberPicker from './MemberPicker.js';
 import LabelBadge from '../board/LabelBadge.js';
@@ -72,7 +73,6 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
   // Description editing
   const [editingDesc, setEditingDesc] = useState(false);
   const [descValue, setDescValue] = useState('');
-  const descTextareaRef = useRef<HTMLTextAreaElement>(null);
 
   // Label picker
   const [showLabelPicker, setShowLabelPicker] = useState(false);
@@ -162,11 +162,6 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
   useEffect(() => {
     if (editingTitle) titleInputRef.current?.focus();
   }, [editingTitle]);
-
-  // Focus desc textarea when editing
-  useEffect(() => {
-    if (editingDesc) descTextareaRef.current?.focus();
-  }, [editingDesc]);
 
   // Click-outside handler for list picker
   useEffect(() => {
@@ -600,32 +595,18 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
             </div>
 
             {editingDesc ? (
-              <div>
-                <textarea
-                  ref={descTextareaRef}
-                  className="w-full min-h-[120px] border border-gray-300 rounded p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                  value={descValue}
-                  onChange={(e) => setDescValue(e.target.value)}
-                  placeholder="Add a more detailed description..."
-                />
-                <div className="flex gap-2 mt-2">
-                  <button
-                    onClick={handleDescSave}
-                    className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-4 py-1.5 rounded"
-                  >
-                    Save
-                  </button>
-                  <button
-                    onClick={() => {
-                      setDescValue(card.description ?? '');
-                      setEditingDesc(false);
-                    }}
-                    className="text-sm text-gray-500 hover:text-gray-700 px-3 py-1.5"
-                  >
-                    Cancel
-                  </button>
-                </div>
-              </div>
+              <MarkdownEditor
+                value={descValue}
+                onChange={setDescValue}
+                onSave={handleDescSave}
+                onCancel={() => {
+                  setDescValue(card.description ?? '');
+                  setEditingDesc(false);
+                }}
+                placeholder="Add a more detailed description..."
+                minHeight={120}
+                autoFocus
+              />
             ) : card.description ? (
               <div className="min-h-[100px]">
                 <MarkdownRenderer content={card.description} />

@@ -13,16 +13,22 @@ vi.mock('../../../api/client.js', () => ({
   },
 }));
 
+// Stable store object: building a fresh object per render would give the
+// action functions new identities each render, re-firing effects that depend
+// on them (e.g. the checklist-summary effect) and causing a render storm.
+const { boardStoreState } = vi.hoisted(() => ({
+  boardStoreState: {
+    lists: [{ id: 'list-1', name: 'To Do' }],
+    labels: [{ id: 'label-1', name: 'Bug', color: 'red' }],
+    members: [{ id: 'user-1', username: 'john', displayName: 'John', avatarUrl: null }],
+    deleteCard: vi.fn(),
+    updateCard: vi.fn(),
+    updateCardChecklist: vi.fn(),
+    toggleCardLabel: vi.fn(),
+  } as Record<string, unknown>,
+}));
 vi.mock('../../../stores/boardStore.js', () => ({
-  useBoardStore: (selector: (s: Record<string, unknown>) => unknown) =>
-    selector({
-      lists: [{ id: 'list-1', name: 'To Do' }],
-      labels: [{ id: 'label-1', name: 'Bug', color: 'red' }],
-      members: [{ id: 'user-1', username: 'john', displayName: 'John', avatarUrl: null }],
-      deleteCard: vi.fn(),
-      updateCard: vi.fn(),
-      toggleCardLabel: vi.fn(),
-    }),
+  useBoardStore: (selector: (s: Record<string, unknown>) => unknown) => selector(boardStoreState),
 }));
 
 vi.mock('../../../stores/authStore.js', () => ({
@@ -32,6 +38,12 @@ vi.mock('../../../stores/authStore.js', () => ({
 
 vi.mock('../MarkdownRenderer.js', () => ({
   default: ({ content }: { content: string }) => <div data-testid="markdown-renderer">{content}</div>,
+}));
+
+vi.mock('../MarkdownEditor.js', () => ({
+  default: ({ value }: { value: string }) => (
+    <div data-testid="markdown-editor" data-value={value} />
+  ),
 }));
 
 vi.mock('../CardChecklist.js', () => ({
@@ -205,6 +217,21 @@ describe('CardDetail layout', () => {
 
     // No Labels heading should appear in the main content when there are no labels
     expect(labelsHeadings.length).toBe(0);
+  });
+
+  it('clicking Edit on the description renders the markdown editor wired to the value', async () => {
+    renderCardDetail();
+
+    await waitFor(() => {
+      expect(screen.getByText('Test Card')).toBeInTheDocument();
+    });
+
+    // The description Edit button sits next to the Description heading.
+    const editButtons = screen.getAllByRole('button', { name: /^Edit$/i });
+    fireEvent.click(editButtons[0]);
+
+    const editor = await screen.findByTestId('markdown-editor');
+    expect(editor).toHaveAttribute('data-value', 'Test description');
   });
 
   it('members section is not rendered in sidebar when card has no members', async () => {

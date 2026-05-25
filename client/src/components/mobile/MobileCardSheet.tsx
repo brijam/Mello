@@ -52,6 +52,7 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
   const [titleValue, setTitleValue] = useState('');
   const [editingDesc, setEditingDesc] = useState(false);
   const [descValue, setDescValue] = useState('');
+  const [descTab, setDescTab] = useState<'write' | 'preview'>('write');
 
   const [section, setSection] = useState<'main' | 'labels' | 'members' | 'list' | 'menu'>('main');
 
@@ -462,6 +463,7 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
                 <button
                   onClick={() => {
                     setDescValue(card.description ?? '');
+                    setDescTab('write');
                     setEditingDesc(true);
                   }}
                   style={{
@@ -479,25 +481,79 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
             </div>
             {editingDesc ? (
               <div>
-                <textarea
-                  ref={descRef}
-                  value={descValue}
-                  onChange={(e) => setDescValue(e.target.value)}
-                  rows={6}
+                <div
                   style={{
-                    width: '100%',
-                    background: D.surface,
-                    color: D.ink,
-                    border: `0.5px solid ${D.hair2}`,
-                    borderRadius: 10,
-                    padding: 12,
-                    fontSize: 15,
-                    lineHeight: 1.4,
-                    fontFamily: MOBILE_FONT_STACK,
-                    outline: 'none',
-                    resize: 'vertical',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    marginBottom: 8,
                   }}
-                />
+                >
+                  <div style={{ display: 'flex', gap: 4 }}>
+                    {(['write', 'preview'] as const).map((t) => (
+                      <button
+                        key={t}
+                        onClick={() => setDescTab(t)}
+                        style={{
+                          background: 'transparent',
+                          border: 'none',
+                          borderBottom: descTab === t ? `2px solid ${D.sky}` : '2px solid transparent',
+                          color: descTab === t ? D.sky : D.mute,
+                          fontSize: 13,
+                          fontWeight: descTab === t ? 600 : 500,
+                          padding: '2px 6px',
+                          cursor: 'pointer',
+                          fontFamily: MOBILE_FONT_STACK,
+                        }}
+                      >
+                        {t === 'write' ? 'Write' : 'Preview'}
+                      </button>
+                    ))}
+                  </div>
+                  <span style={{ color: D.mute, fontSize: 12, fontFamily: MOBILE_FONT_STACK }}>
+                    Markdown supported
+                  </span>
+                </div>
+                {descTab === 'write' ? (
+                  <textarea
+                    ref={descRef}
+                    value={descValue}
+                    onChange={(e) => setDescValue(e.target.value)}
+                    rows={6}
+                    style={{
+                      width: '100%',
+                      background: D.surface,
+                      color: D.ink,
+                      border: `0.5px solid ${D.hair2}`,
+                      borderRadius: 10,
+                      padding: 12,
+                      fontSize: 15,
+                      lineHeight: 1.4,
+                      fontFamily: MOBILE_FONT_STACK,
+                      outline: 'none',
+                      resize: 'vertical',
+                    }}
+                  />
+                ) : (
+                  <div
+                    style={{
+                      background: D.surface,
+                      borderRadius: 10,
+                      border: `0.5px solid ${D.hair2}`,
+                      padding: 14,
+                      minHeight: 96,
+                      fontSize: 15,
+                      lineHeight: 1.4,
+                      color: D.ink,
+                    }}
+                  >
+                    {descValue.trim() ? (
+                      <MarkdownRenderer content={descValue} />
+                    ) : (
+                      <span style={{ color: D.mute, fontSize: 14 }}>Nothing to preview</span>
+                    )}
+                  </div>
+                )}
                 <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
                   <button
                     onClick={saveDesc}
@@ -542,6 +598,7 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
               <div
                 onClick={() => {
                   setDescValue(card.description ?? '');
+                  setDescTab('write');
                   setEditingDesc(true);
                 }}
                 style={{
@@ -561,6 +618,7 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
               <div
                 onClick={() => {
                   setDescValue('');
+                  setDescTab('write');
                   setEditingDesc(true);
                 }}
                 style={{

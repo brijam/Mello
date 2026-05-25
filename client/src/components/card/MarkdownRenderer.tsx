@@ -8,7 +8,7 @@ interface MarkdownRendererProps {
 
 export default function MarkdownRenderer({ content }: MarkdownRendererProps) {
   const html = useMemo(() => {
-    const raw = marked.parse(content, { async: false }) as string;
+    const raw = marked.parse(content, { async: false, gfm: true, breaks: true }) as string;
     return DOMPurify.sanitize(raw);
   }, [content]);
 

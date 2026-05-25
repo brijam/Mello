@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { api } from '../../api/client.js';
 import { useAuthStore } from '../../stores/authStore.js';
 import MarkdownRenderer from './MarkdownRenderer.js';
+import MarkdownEditor from './MarkdownEditor.js';
 import { timeAgo } from '../../utils/timeAgo.js';
 
 interface CommentUser {
@@ -120,27 +121,22 @@ export default function CardComments({ cardId }: CardCommentsProps) {
     <div>
       {/* New comment */}
       <div className="mb-4">
-        <textarea
-          className="w-full min-h-[80px] border border-gray-300 rounded p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-          placeholder="Write a comment..."
+        <MarkdownEditor
           value={newBody}
-          onChange={(e) => setNewBody(e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleSubmit();
-          }}
+          onChange={setNewBody}
+          onSave={handleSubmit}
+          onCancel={() => setNewBody('')}
+          placeholder="Write a comment..."
+          minHeight={80}
+          submitting={submitting}
+          disableEmpty
+          hideCancel
+          footerExtra={
+            <span className="text-sm text-gray-400">
+              Tip: @mention other board members to notify them
+            </span>
+          }
         />
-        <div className="flex items-center gap-3 mt-1.5">
-          <button
-            onClick={handleSubmit}
-            disabled={!newBody.trim() || submitting}
-            className="bg-blue-600 hover:bg-blue-700 disabled:bg-gray-300 disabled:cursor-not-allowed text-white text-sm px-4 py-1.5 rounded"
-          >
-            {submitting ? 'Saving...' : 'Save'}
-          </button>
-          <span className="text-sm text-gray-400">
-            Tip: @mention other board members to notify them
-          </span>
-        </div>
       </div>
 
       {/* Comments list */}
@@ -169,32 +165,15 @@ export default function CardComments({ cardId }: CardCommentsProps) {
                   </div>
 
                   {isEditing ? (
-                    <div>
-                      <textarea
-                        className="w-full min-h-[60px] border border-gray-300 rounded p-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-                        value={editBody}
-                        onChange={(e) => setEditBody(e.target.value)}
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) handleEdit(comment.id);
-                          if (e.key === 'Escape') setEditingId(null);
-                        }}
-                        autoFocus
-                      />
-                      <div className="flex gap-2 mt-1">
-                        <button
-                          onClick={() => handleEdit(comment.id)}
-                          className="bg-blue-600 hover:bg-blue-700 text-white text-sm px-3 py-1 rounded"
-                        >
-                          Save
-                        </button>
-                        <button
-                          onClick={() => setEditingId(null)}
-                          className="text-sm text-gray-500 hover:text-gray-700 px-2 py-1"
-                        >
-                          Cancel
-                        </button>
-                      </div>
-                    </div>
+                    <MarkdownEditor
+                      value={editBody}
+                      onChange={setEditBody}
+                      onSave={() => handleEdit(comment.id)}
+                      onCancel={() => setEditingId(null)}
+                      minHeight={60}
+                      autoFocus
+                      disableEmpty
+                    />
                   ) : (
                     <>
                       <div className="bg-gray-50 rounded p-2">
