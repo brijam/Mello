@@ -45,8 +45,8 @@ rm -rf "${REPO_DIR}/packages/shared/dist" \
        "${REPO_DIR}/client/tsconfig.tsbuildinfo"
 find "$REPO_DIR" -type d -name node_modules -prune -exec rm -rf {} +
 
-echo "==> Fresh npm install"
-run_as_mello "npm install --no-audit --no-fund"
+echo "==> Fresh npm ci (clean install from committed lockfile)"
+run_as_mello "npm ci --no-audit --no-fund"
 
 echo "==> Sanity: source admin.ts has the schemas we expect"
 for sym in adminCreateUserSchema adminUpdateUserSchema adminResetPasswordSchema \

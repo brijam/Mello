@@ -21,7 +21,7 @@ Usage: $0 [--skip-backup] [--skip-install] [--skip-build] [--skip-migrate]
 
 Steps (each is idempotent — safe to re-run):
   1. ./backup-prod.sh --db-only   (unless --skip-backup)
-  2. npm install                  (unless --skip-install; no-op when lockfile matches)
+  2. npm ci                       (unless --skip-install; clean install from committed lockfile)
   3. npm run build                (unless --skip-build)
   4. drizzle-kit migrate          (unless --skip-migrate; only applies new migrations)
   5. systemctl restart \$SERVICE_NAME
@@ -63,8 +63,10 @@ if [[ "$SKIP_BACKUP" != "1" ]]; then
 fi
 
 if [[ "$SKIP_INSTALL" != "1" ]]; then
-  echo "==> npm install"
-  npm install
+  echo "==> npm ci"
+  # Clean install from the committed lockfile — never mutates package*.json,
+  # so the deployed tree can't drift from the repo (and never auto-"fixes" audits).
+  npm ci
 fi
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
