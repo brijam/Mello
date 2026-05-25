@@ -28,8 +28,17 @@ describe('MarkdownEditor', () => {
   it('shows the Write textarea and the markdown hint by default', () => {
     renderEditor();
     expect(screen.getByRole('textbox')).toHaveValue('hello');
-    expect(screen.getByText('Markdown supported')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Markdown/ })).toBeInTheDocument();
     expect(screen.queryByTestId('markdown-renderer')).not.toBeInTheDocument();
+  });
+
+  it('toggles a syntax cheatsheet when the Markdown hint is clicked', () => {
+    renderEditor();
+    expect(screen.queryByText('Bold')).not.toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: /Markdown/ }));
+    expect(screen.getByText('Bold')).toBeInTheDocument();
+    expect(screen.getByText('**bold**')).toBeInTheDocument();
+    expect(screen.getByText('Bullet list')).toBeInTheDocument();
   });
 
   it('renders MarkdownRenderer with the current value when Preview is selected', () => {

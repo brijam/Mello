@@ -1,5 +1,6 @@
 import { useState, type ReactNode, type KeyboardEvent } from 'react';
 import MarkdownRenderer from './MarkdownRenderer.js';
+import { MARKDOWN_SYNTAX } from './markdownSyntax.js';
 
 interface MarkdownEditorProps {
   value: string;
@@ -31,6 +32,7 @@ export default function MarkdownEditor({
   footerExtra,
 }: MarkdownEditorProps) {
   const [tab, setTab] = useState<'write' | 'preview'>('write');
+  const [showHelp, setShowHelp] = useState(false);
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -62,8 +64,26 @@ export default function MarkdownEditor({
             Preview
           </button>
         </div>
-        <span className="text-xs text-gray-400">Markdown supported</span>
+        <button
+          type="button"
+          onClick={() => setShowHelp((h) => !h)}
+          className="text-xs text-gray-400 hover:text-gray-600 underline decoration-dotted"
+          aria-expanded={showHelp}
+        >
+          Markdown {showHelp ? '▲' : '▼'}
+        </button>
       </div>
+
+      {showHelp && (
+        <div className="mb-2 p-2 rounded bg-gray-50 border border-gray-200 grid grid-cols-2 gap-x-4 gap-y-1">
+          {MARKDOWN_SYNTAX.map(({ syntax, label }) => (
+            <div key={syntax} className="flex items-center gap-2 text-xs text-gray-600">
+              <code className="bg-gray-200 text-gray-800 px-1 rounded whitespace-nowrap">{syntax}</code>
+              <span className="text-gray-400">{label}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       {tab === 'write' ? (
         <textarea

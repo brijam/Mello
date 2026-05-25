@@ -7,6 +7,7 @@ import { api } from '../../api/client.js';
 import { useBoardStore } from '../../stores/boardStore.js';
 import LabelBadge from '../board/LabelBadge.js';
 import MarkdownRenderer from '../card/MarkdownRenderer.js';
+import { MARKDOWN_SYNTAX } from '../card/markdownSyntax.js';
 import { D, MOBILE_FONT_STACK } from './mobileTheme.js';
 import { Sheet, SheetHeader, ActionRow, CancelRow, Divider } from './MobileListMenu.js';
 
@@ -53,6 +54,7 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
   const [editingDesc, setEditingDesc] = useState(false);
   const [descValue, setDescValue] = useState('');
   const [descTab, setDescTab] = useState<'write' | 'preview'>('write');
+  const [descHelp, setDescHelp] = useState(false);
 
   const [section, setSection] = useState<'main' | 'labels' | 'members' | 'list' | 'menu'>('main');
 
@@ -510,10 +512,55 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
                       </button>
                     ))}
                   </div>
-                  <span style={{ color: D.mute, fontSize: 12, fontFamily: MOBILE_FONT_STACK }}>
-                    Markdown supported
-                  </span>
+                  <button
+                    onClick={() => setDescHelp((h) => !h)}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: D.mute,
+                      fontSize: 12,
+                      fontFamily: MOBILE_FONT_STACK,
+                      cursor: 'pointer',
+                      textDecoration: 'underline',
+                    }}
+                  >
+                    Markdown {descHelp ? '▲' : '▼'}
+                  </button>
                 </div>
+                {descHelp && (
+                  <div
+                    style={{
+                      display: 'grid',
+                      gridTemplateColumns: '1fr 1fr',
+                      gap: '4px 12px',
+                      background: D.surface,
+                      border: `0.5px solid ${D.hair2}`,
+                      borderRadius: 10,
+                      padding: 10,
+                      marginBottom: 8,
+                    }}
+                  >
+                    {MARKDOWN_SYNTAX.map(({ syntax, label }) => (
+                      <div key={syntax} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                        <code
+                          style={{
+                            background: D.surface2,
+                            color: D.ink2,
+                            borderRadius: 4,
+                            padding: '1px 5px',
+                            fontSize: 11,
+                            whiteSpace: 'nowrap',
+                          }}
+                        >
+                          {syntax}
+                        </code>
+                        <span style={{ color: D.mute, fontSize: 11, fontFamily: MOBILE_FONT_STACK }}>
+                          {label}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
                 {descTab === 'write' ? (
                   <textarea
                     ref={descRef}
@@ -548,7 +595,7 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
                     }}
                   >
                     {descValue.trim() ? (
-                      <MarkdownRenderer content={descValue} />
+                      <MarkdownRenderer content={descValue} invert />
                     ) : (
                       <span style={{ color: D.mute, fontSize: 14 }}>Nothing to preview</span>
                     )}
@@ -612,7 +659,7 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
                   color: D.ink,
                 }}
               >
-                <MarkdownRenderer content={card.description} />
+                <MarkdownRenderer content={card.description} invert />
               </div>
             ) : (
               <div
