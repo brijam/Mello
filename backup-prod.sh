@@ -9,7 +9,7 @@ REPO_DIR="/opt/mello-repo"
 ATTACHMENTS_DIR="${REPO_DIR}/server/data/attachments"
 BACKUP_DIR="${BACKUP_DIR:-/var/backups/mello}"
 STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
-KEEP_DAYS="${KEEP_DAYS:-14}"
+KEEP_DAYS="${KEEP_DAYS:-365}"
 INCLUDE_ATTACHMENTS="${INCLUDE_ATTACHMENTS:-1}"
 
 usage() {
@@ -20,7 +20,7 @@ Writes:
   ${BACKUP_DIR}/mello-db-<stamp>.sql.gz
   ${BACKUP_DIR}/mello-attachments-<stamp>.tar.gz   (unless --db-only)
 
-Env overrides: BACKUP_DIR, KEEP_DAYS (default 14), INCLUDE_ATTACHMENTS=0
+Env overrides: BACKUP_DIR, KEEP_DAYS (default 365), INCLUDE_ATTACHMENTS=0
 USAGE
   exit 1
 }
