@@ -25,6 +25,15 @@ export default function MobileSearchSheet({ onClose }: MobileSearchSheetProps) {
     inputRef.current?.focus();
   }, []);
 
+  // Lock background (boards view) scroll while the sheet is open.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   useEffect(() => {
     const id = setTimeout(() => {
       setQuery(local);
@@ -40,7 +49,9 @@ export default function MobileSearchSheet({ onClose }: MobileSearchSheetProps) {
         inset: 0,
         background: D.bg,
         color: D.ink,
-        zIndex: 50,
+        // Sit below the bottom bar (zIndex 30) so it stays visible; the iOS
+        // keyboard still covers the bar while up and reveals it when dismissed.
+        zIndex: 25,
         fontFamily: MOBILE_FONT_STACK,
         display: 'flex',
         flexDirection: 'column',
@@ -132,7 +143,14 @@ export default function MobileSearchSheet({ onClose }: MobileSearchSheetProps) {
         </button>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          // Clear the bottom bar that now sits visible above this sheet.
+          paddingBottom: 'calc(env(safe-area-inset-bottom) + 60px)',
+        }}
+      >
         {loading && (
           <div style={{ padding: '40px 0', textAlign: 'center', color: D.mute, fontSize: 14 }}>
             Searching…

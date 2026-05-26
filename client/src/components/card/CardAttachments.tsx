@@ -64,18 +64,22 @@ export default function CardAttachments({ cardId, attachments, onRefresh, curren
     }
   }, [cardId, onRefresh]);
 
+  const uploadFiles = useCallback(async (files: File[]) => {
+    for (const file of files) await uploadFile(file);
+  }, [uploadFile]);
+
   const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) uploadFile(file);
-    // Reset input so the same file can be selected again
+    const files = Array.from(e.target.files ?? []);
+    if (files.length) void uploadFiles(files);
+    // Reset input so the same file(s) can be selected again
     e.target.value = '';
   };
 
   const handleDrop = (e: React.DragEvent) => {
     e.preventDefault();
     setDragOver(false);
-    const file = e.dataTransfer.files?.[0];
-    if (file) uploadFile(file);
+    const files = Array.from(e.dataTransfer.files ?? []);
+    if (files.length) void uploadFiles(files);
   };
 
   const handleDragOver = (e: React.DragEvent) => {
@@ -172,6 +176,7 @@ export default function CardAttachments({ cardId, attachments, onRefresh, curren
         <input
           ref={fileInputRef}
           type="file"
+          multiple
           className="hidden"
           onChange={handleFileSelect}
         />

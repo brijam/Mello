@@ -547,22 +547,25 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
         <input
           ref={attachmentFileInputRef}
           type="file"
+          multiple
           className="hidden"
           onChange={async (e) => {
-            const file = e.target.files?.[0];
-            if (!file) return;
-            const formData = new FormData();
-            formData.append('file', file);
-            try {
-              await fetch(`/api/v1/cards/${card.id}/attachments`, {
-                method: 'POST',
-                credentials: 'include',
-                body: formData,
-              });
-              await fetchCard();
-            } catch {
-              // ignore
+            const files = Array.from(e.target.files ?? []);
+            if (files.length === 0) return;
+            for (const file of files) {
+              const formData = new FormData();
+              formData.append('file', file);
+              try {
+                await fetch(`/api/v1/cards/${card.id}/attachments`, {
+                  method: 'POST',
+                  credentials: 'include',
+                  body: formData,
+                });
+              } catch {
+                // ignore
+              }
             }
+            await fetchCard();
             e.target.value = '';
           }}
         />

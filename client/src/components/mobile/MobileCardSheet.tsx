@@ -866,10 +866,15 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
             <input
               ref={fileInputRef}
               type="file"
+              multiple
               style={{ display: 'none' }}
               onChange={(e) => {
-                const f = e.target.files?.[0];
-                if (f) void uploadFile(f);
+                const files = Array.from(e.target.files ?? []);
+                if (files.length) {
+                  void (async () => {
+                    for (const f of files) await uploadFile(f);
+                  })();
+                }
                 e.target.value = '';
               }}
             />

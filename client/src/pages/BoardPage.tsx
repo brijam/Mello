@@ -306,11 +306,14 @@ export default function BoardPage() {
 
       const listEl = document.querySelector(`[data-list-id="${overListId}"]`) as HTMLElement | null;
       let insertIndex = 0;
+      // Viewport Y of the gap the card will drop into, so the indicator can be
+      // anchored right above the target card rather than floating at the pointer.
+      let boundaryY: number | null = null;
       if (listEl) {
-        const cardEls = listEl.querySelectorAll('[data-card-id]');
+        const cardEls = Array.from(
+          listEl.querySelectorAll('[data-card-id]'),
+        ).filter((el) => el.getAttribute('data-card-id') !== activeCardId); // skip the dragged card
         for (const el of cardEls) {
-          const elCardId = el.getAttribute('data-card-id');
-          if (elCardId === activeCardId) continue; // skip the dragged card
           const rect = el.getBoundingClientRect();
           if (pointerY > rect.top + rect.height / 2) {
             insertIndex++;
@@ -318,17 +321,27 @@ export default function BoardPage() {
             break;
           }
         }
+        if (cardEls.length > 0) {
+          // Top of the card now at insertIndex, or the bottom edge of the last
+          // card when dropping at the end of the list.
+          boundaryY =
+            insertIndex < cardEls.length
+              ? cardEls[insertIndex].getBoundingClientRect().top
+              : cardEls[cardEls.length - 1].getBoundingClientRect().bottom;
+        }
       }
 
-      // Position the indicator at the pointer's Y level, clamped to the
-      // list's visible scroll viewport so it never disappears above/below
-      // when cards are scrolled off-screen.
+      // Anchor the indicator to the target card boundary (falling back to the
+      // pointer for an empty list), clamped to the list's visible scroll
+      // viewport so it never disappears above/below when cards are scrolled
+      // off-screen.
       if (dropIndicatorRef.current && listEl) {
         const indicator = dropIndicatorRef.current;
         const listRect = listEl.getBoundingClientRect();
+        const targetY = boundaryY ?? pointerY;
         const clampedY = Math.max(
           listRect.top + 2,
-          Math.min(listRect.bottom - 2, pointerY),
+          Math.min(listRect.bottom - 2, targetY),
         );
         indicator.style.top = `${clampedY - 1.5}px`;
         indicator.style.left = `${listRect.left + 8}px`;

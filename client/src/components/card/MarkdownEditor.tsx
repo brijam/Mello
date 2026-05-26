@@ -161,13 +161,41 @@ export default function MarkdownEditor({
     );
   }
 
+  /**
+   * Code formatting that picks the right markdown for the selection: inline
+   * `code` for a single line (or empty selection), but a fenced ``` block when
+   * the selection spans multiple lines. Inline code collapses newlines into
+   * spaces, which silently mangles multi-line content like pasted commands;
+   * a fenced block preserves the line breaks.
+   */
+  function applyCode() {
+    const ta = textareaRef.current;
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const end = ta.selectionEnd;
+    const sel = value.slice(start, end);
+    if (!sel.includes('\n')) {
+      surround('`', '`');
+      return;
+    }
+    const before = value.slice(0, start);
+    const after = value.slice(end);
+    // Keep the fence delimiters on their own lines.
+    const lead = before.length > 0 && !before.endsWith('\n') ? '\n' : '';
+    const trail = after.length > 0 && !after.startsWith('\n') ? '\n' : '';
+    const open = lead + '```\n';
+    const next = before + open + sel + '\n```' + trail + after;
+    const selStart = before.length + open.length;
+    applyChange(next, selStart, selStart + sel.length);
+  }
+
   const tools: { key: string; title: string; glyph: ReactNode; action: () => void }[] = [
     { key: 'bold', title: 'Bold (Ctrl/Cmd+B)', glyph: <span className="font-bold">B</span>, action: () => surround('**', '**') },
     { key: 'underline', title: 'Underline (Ctrl/Cmd+U)', glyph: <span className="underline">U</span>, action: () => surround('<u>', '</u>') },
     { key: 'italic', title: 'Italic (Ctrl/Cmd+I)', glyph: <span className="italic font-serif">I</span>, action: () => surround('*', '*') },
     { key: 'strike', title: 'Strikethrough', glyph: <span className="line-through">S</span>, action: () => surround('~~', '~~') },
     { key: 'ul', title: 'Bulleted list', glyph: <ListIcon />, action: () => prefixLines('- ') },
-    { key: 'code', title: 'Code', glyph: <CodeIcon />, action: () => surround('`', '`') },
+    { key: 'code', title: 'Code', glyph: <CodeIcon />, action: applyCode },
     { key: 'quote', title: 'Quote', glyph: <QuoteIcon />, action: () => prefixLines('> ') },
   ];
 

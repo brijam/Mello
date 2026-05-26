@@ -23,6 +23,15 @@ export default function MobileNotificationsSheet({ onClose }: MobileNotification
     fetchNotifications(true);
   }, [fetchNotifications]);
 
+  // Lock background (boards view) scroll while the sheet is open.
+  useEffect(() => {
+    const prev = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    return () => {
+      document.body.style.overflow = prev;
+    };
+  }, []);
+
   return (
     <div
       style={{
@@ -30,7 +39,8 @@ export default function MobileNotificationsSheet({ onClose }: MobileNotification
         inset: 0,
         background: D.bg,
         color: D.ink,
-        zIndex: 50,
+        // Sit below the bottom bar (zIndex 30) so it stays visible.
+        zIndex: 25,
         fontFamily: MOBILE_FONT_STACK,
         display: 'flex',
         flexDirection: 'column',
@@ -83,7 +93,14 @@ export default function MobileNotificationsSheet({ onClose }: MobileNotification
         </button>
       </header>
 
-      <div style={{ flex: 1, overflowY: 'auto' }}>
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          // Clear the bottom bar that now sits visible above this sheet.
+          paddingBottom: 'calc(env(safe-area-inset-bottom) + 60px)',
+        }}
+      >
         {loading && notifications.length === 0 && (
           <div style={{ padding: '40px 0', textAlign: 'center', color: D.mute, fontSize: 14 }}>
             Loading…
