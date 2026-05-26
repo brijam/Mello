@@ -235,7 +235,7 @@ export default function MarkdownEditor({
       {tab === 'write' ? (
         <textarea
           ref={textareaRef}
-          className="w-full border border-gray-300 rounded p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+          className="md-editor-textarea w-full border border-gray-300 rounded p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
           style={{ minHeight }}
           value={value}
           onChange={(e) => onChange(e.target.value)}

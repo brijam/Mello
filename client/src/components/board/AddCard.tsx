@@ -15,6 +15,12 @@ export default function AddCard({ listId }: AddCardProps) {
     if (!name.trim()) return;
     await addCard(listId, name.trim());
     setName('');
+    // Scroll the list's card container to the bottom so the new card is visible.
+    // Wait a frame so the new card has mounted before measuring scrollHeight.
+    requestAnimationFrame(() => {
+      const container = document.querySelector<HTMLElement>(`[data-list-id="${listId}"]`);
+      if (container) container.scrollTop = container.scrollHeight;
+    });
   };
 
   if (!isAdding) {

@@ -28,6 +28,20 @@
 }
 
 /*
+ * Markdown editor: make text selection clearly visible, including on blank
+ * lines. Browsers draw a roughly space-wide selection block on an empty line
+ * within a textarea, but the default selection color is faint enough to miss.
+ * An explicit, stronger highlight makes selected blank lines stand out the way
+ * a code editor's selection does. Works on both light and dark surfaces.
+ */
+.md-editor-textarea::selection {
+  background-color: rgba(37, 99, 235, 0.4);
+}
+.md-editor-textarea::-moz-selection {
+  background-color: rgba(37, 99, 235, 0.4);
+}
+
+/*
  * Dark mode overrides
  *
  * The toggle adds .dark to <html>. Selectors below use higher specificity than

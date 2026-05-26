@@ -113,7 +113,9 @@ export default memo(function Card({ card, listId }: CardProps) {
           <button
             onClick={(e) => {
               e.stopPropagation();
-              deleteCard(card.id);
+              if (confirm('Delete this card? This cannot be undone.')) {
+                deleteCard(card.id);
+              }
             }}
             onPointerDown={(e) => e.stopPropagation()}
             onPointerUp={(e) => e.stopPropagation()}

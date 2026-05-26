@@ -321,6 +321,7 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
 
   async function handleDelete() {
     if (!card) return;
+    if (!confirm('Delete this card? This cannot be undone.')) return;
     await deleteCardStore(card.id);
     onClose();
   }
