@@ -13,6 +13,11 @@
   select {
     font-size: 16px;
   }
+  /* Keep the markdown editor's highlight backdrop in lockstep with its
+     textarea, which is bumped to 16px above to dodge iOS focus-zoom. */
+  .md-editor-backdrop {
+    font-size: 16px;
+  }
 }
 
 /*
@@ -28,17 +33,80 @@
 }
 
 /*
- * Markdown editor: make text selection clearly visible, including on blank
- * lines. Browsers draw a roughly space-wide selection block on an empty line
- * within a textarea, but the default selection color is faint enough to miss.
- * An explicit, stronger highlight makes selected blank lines stand out the way
- * a code editor's selection does. Works on both light and dark surfaces.
+ * Markdown editor selection highlight.
+ *
+ * A native <textarea> draws only a ~1-char-wide highlight on an empty line, and
+ * CSS ::selection can recolor but not resize it — so blank lines are easy to
+ * miss. To get a code-editor-style FULL-WIDTH highlight on blank lines, we
+ * mirror the textarea content in a backdrop layer that we highlight ourselves.
+ *
+ * Layering (bottom → top): .md-editor-shell (opaque fill) → .md-editor-backdrop
+ * (mirrored text, transparent ink, draws the highlight) → .md-editor-textarea
+ * (transparent background, visible text + caret, native selection hidden). The
+ * backdrop must match the textarea's box metrics exactly (font, padding,
+ * border, line-height, wrapping) so the highlight lands under the right glyphs.
  */
-.md-editor-textarea::selection {
+.md-editor-shell {
+  position: relative;
+  border-radius: 0.25rem;
+  background: #ffffff;
+}
+html.dark .md-editor-shell {
+  background: #1e293b;
+}
+
+.md-editor-backdrop {
+  position: absolute;
+  inset: 0;
+  margin: 0;
+  border: 1px solid transparent; /* match textarea border box */
+  border-radius: 0.25rem;
+  padding: 0.75rem; /* match textarea p-3 */
+  overflow: hidden;
+  pointer-events: none;
+  user-select: none;
+  color: transparent;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
+}
+
+/* Each mirrored line is its own block so blank lines keep full line height. */
+.md-hl-line {
+  min-height: 1.25rem; /* match text-sm line-height */
+}
+
+.md-hl {
   background-color: rgba(37, 99, 235, 0.4);
+  color: transparent;
+  border-radius: 2px;
+}
+/* A fully selected line (including a blank one) fills the full content width. */
+.md-hl-block {
+  display: block;
+}
+
+/* Share the page font + metrics so the mirror aligns with the textarea text. */
+.md-editor-textarea,
+.md-editor-backdrop {
+  font-family: inherit;
+  letter-spacing: normal;
+}
+
+.md-editor-textarea {
+  position: relative;
+  z-index: 1;
+  background: transparent;
+}
+html.dark .md-editor-textarea {
+  background: transparent; /* beat html.dark textarea{} so the backdrop shows */
+}
+/* Hide the native selection — the backdrop renders it instead. */
+.md-editor-textarea::selection {
+  background: transparent;
 }
 .md-editor-textarea::-moz-selection {
-  background-color: rgba(37, 99, 235, 0.4);
+  background: transparent;
 }
 
 /*

@@ -2,6 +2,68 @@ import { useRef, useState, type ReactNode, type KeyboardEvent } from 'react';
 import MarkdownRenderer from './MarkdownRenderer.js';
 import { MARKDOWN_SYNTAX } from './markdownSyntax.js';
 
+// Zero-width space: gives blank/empty mirrored lines a real line box so they
+// keep height (and a visible highlight bar) without contributing any width.
+const ZWSP = String.fromCharCode(0x200b); // U+200B zero-width space
+
+/**
+ * Build the mirrored selection highlight for the backdrop layer. Returns one
+ * block element per line of `value`. A line whose entire content + line break
+ * fall inside the selection (including a blank line) becomes a full-width
+ * highlight bar; a partially selected line highlights only its selected run.
+ */
+function buildHighlightLines(value: string, selStart: number, selEnd: number): ReactNode[] {
+  const start = Math.min(selStart, selEnd);
+  const end = Math.max(selStart, selEnd);
+  const active = end > start;
+  const lines = value.split('\n');
+  const out: ReactNode[] = [];
+  let pos = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const lineStart = pos;
+    const lineEnd = pos + line.length; // position of the trailing '\n' (or EOF)
+    const isLast = i === lines.length - 1;
+    const touched = active && start <= lineEnd && end > lineStart;
+
+    if (!touched) {
+      out.push(
+        <div key={i} className="md-hl-line">
+          {line || ZWSP}
+        </div>,
+      );
+    } else {
+      // The line's own newline is inside the selection (so it continues below).
+      const breakSelected = !isLast && start <= lineEnd && end > lineEnd;
+      // Whole line + its break selected → edge-to-edge bar (covers blank lines).
+      const fullWidth = start <= lineStart && breakSelected;
+      if (fullWidth) {
+        out.push(
+          <div key={i} className="md-hl-line">
+            <mark className="md-hl md-hl-block">{line || ZWSP}</mark>
+          </div>,
+        );
+      } else {
+        const a = line.slice(0, Math.max(0, start - lineStart));
+        const selS = Math.max(start, lineStart);
+        const selE = Math.min(end, lineEnd);
+        const b = line.slice(selS - lineStart, selE - lineStart);
+        const c = line.slice(selE - lineStart);
+        out.push(
+          <div key={i} className="md-hl-line">
+            {a}
+            <mark className="md-hl">{b || ZWSP}</mark>
+            {c}
+            {breakSelected && <mark className="md-hl md-hl-eol">{ZWSP}</mark>}
+          </div>,
+        );
+      }
+    }
+    pos = lineEnd + 1; // advance past the '\n'
+  }
+  return out;
+}
+
 interface MarkdownEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -52,7 +114,20 @@ export default function MarkdownEditor({
 }: MarkdownEditorProps) {
   const [tab, setTab] = useState<'write' | 'preview'>('write');
   const [showHelp, setShowHelp] = useState(false);
+  const [sel, setSel] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
+  const backdropRef = useRef<HTMLDivElement>(null);
+
+  // Keep the backdrop scrolled in lockstep with the textarea so the highlight
+  // stays under the right glyphs once the content overflows.
+  const syncScroll = () => {
+    const ta = textareaRef.current;
+    const bd = backdropRef.current;
+    if (ta && bd) {
+      bd.scrollTop = ta.scrollTop;
+      bd.scrollLeft = ta.scrollLeft;
+    }
+  };
 
   const handleKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
@@ -83,6 +158,8 @@ export default function MarkdownEditor({
       if (!ta) return;
       ta.focus();
       ta.setSelectionRange(selStart, selEnd);
+      setSel({ start: selStart, end: selEnd });
+      syncScroll();
     });
   }
 
@@ -261,16 +338,30 @@ export default function MarkdownEditor({
       )}
 
       {tab === 'write' ? (
-        <textarea
-          ref={textareaRef}
-          className="md-editor-textarea w-full border border-gray-300 rounded p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
-          style={{ minHeight }}
-          value={value}
-          onChange={(e) => onChange(e.target.value)}
-          onKeyDown={handleKeyDown}
-          placeholder={placeholder}
-          autoFocus={autoFocus}
-        />
+        <div className="md-editor-shell">
+          <div ref={backdropRef} className="md-editor-backdrop text-sm" aria-hidden="true">
+            {buildHighlightLines(value, sel.start, sel.end)}
+          </div>
+          <textarea
+            ref={textareaRef}
+            className="md-editor-textarea w-full border border-gray-300 rounded p-3 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 resize-y"
+            style={{ minHeight, display: 'block' }}
+            value={value}
+            onChange={(e) => {
+              onChange(e.target.value);
+              const t = e.currentTarget;
+              setSel({ start: t.selectionStart, end: t.selectionEnd });
+            }}
+            onSelect={(e) => {
+              const t = e.currentTarget;
+              setSel({ start: t.selectionStart, end: t.selectionEnd });
+            }}
+            onScroll={syncScroll}
+            onKeyDown={handleKeyDown}
+            placeholder={placeholder}
+            autoFocus={autoFocus}
+          />
+        </div>
       ) : (
         <div className="border border-gray-200 rounded p-3" style={{ minHeight }}>
           {value.trim() ? (

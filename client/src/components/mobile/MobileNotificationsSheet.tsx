@@ -75,22 +75,10 @@ export default function MobileNotificationsSheet({ onClose }: MobileNotification
           Mark all
         </button>
         <div style={{ fontSize: 16, fontWeight: 600 }}>Inbox</div>
-        <button
-          onClick={onClose}
-          style={{
-            justifySelf: 'end',
-            background: 'transparent',
-            border: 'none',
-            color: D.sky,
-            padding: 8,
-            fontSize: 15,
-            fontWeight: 600,
-            cursor: 'pointer',
-            fontFamily: MOBILE_FONT_STACK,
-          }}
-        >
-          Done
-        </button>
+        {/* No "Done" button: the bottom bar stays visible (below this sheet) and
+            its Inbox tab toggles the sheet closed, so a redundant Done is omitted.
+            The empty third grid cell keeps the title centered. */}
+        <span aria-hidden />
       </header>
 
       <div

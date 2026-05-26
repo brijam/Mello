@@ -40,6 +40,7 @@ import {
   MOBILE_PALETTE,
   boardAccentColor,
   listAccentColor,
+  hexToRgba,
 } from '../mobile/mobileTheme.js';
 
 interface CardSummary {
@@ -342,6 +343,18 @@ export default function MobileBoardView({
         >
           {sortedLists.map((l, i) => {
             const on = l.id === validActiveId;
+            // A colored list tints its pill so picking a color visibly recolors
+            // the list; uncolored lists keep the neutral surface treatment.
+            const pillBg = l.color
+              ? hexToRgba(l.color, on ? 0.28 : 0.14)
+              : on
+                ? D.surface2
+                : 'transparent';
+            const pillBorder = l.color
+              ? hexToRgba(l.color, on ? 0.75 : 0.4)
+              : on
+                ? D.hair2
+                : 'transparent';
             return (
               <button
                 key={l.id}
@@ -351,14 +364,14 @@ export default function MobileBoardView({
                   alignItems: 'center',
                   gap: 8,
                   padding: '9px 14px',
-                  background: on ? D.surface2 : 'transparent',
+                  background: pillBg,
                   color: on ? D.ink : D.mute,
                   fontSize: 14,
                   fontWeight: on ? 600 : 500,
                   letterSpacing: -0.1,
                   flexShrink: 0,
                   borderRadius: 10,
-                  border: `0.5px solid ${on ? D.hair2 : 'transparent'}`,
+                  border: `0.5px solid ${pillBorder}`,
                   cursor: 'pointer',
                   whiteSpace: 'nowrap',
                   fontFamily: MOBILE_FONT_STACK,
@@ -420,13 +433,22 @@ export default function MobileBoardView({
           >
             <div
               className="flex items-center"
-              style={{ padding: '14px 22px 10px' }}
+              style={{
+                margin: '12px 12px 4px',
+                padding: '10px 14px',
+                borderRadius: 12,
+                // Tint the active list's header with its chosen color so the
+                // color change is clearly visible, not just a tiny dot. Uncolored
+                // lists keep their original plain header (no accent strip).
+                background: activeList.color ? hexToRgba(activeList.color, 0.16) : 'transparent',
+                borderLeft: `3px solid ${activeList.color ?? 'transparent'}`,
+              }}
             >
               <div
                 style={{
                   fontSize: 12,
-                  color: D.mute,
-                  fontWeight: 500,
+                  color: activeList.color ? D.ink2 : D.mute,
+                  fontWeight: 600,
                   letterSpacing: 0.6,
                   textTransform: 'uppercase',
                   display: 'inline-flex',

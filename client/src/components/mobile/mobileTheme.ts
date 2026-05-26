@@ -38,6 +38,21 @@ export function paletteDot(index: number): string {
   return MOBILE_PALETTE[index % MOBILE_PALETTE.length];
 }
 
+/**
+ * Convert a #RGB / #RRGGBB color to an rgba() string at the given alpha. Used
+ * to tint list surfaces with their chosen color without hardcoding rgba values.
+ * Returns the input unchanged if it isn't a hex color.
+ */
+export function hexToRgba(hex: string, alpha: number): string {
+  let h = hex.replace('#', '');
+  if (h.length === 3) h = h.split('').map((c) => c + c).join('');
+  if (h.length !== 6) return hex;
+  const r = parseInt(h.slice(0, 2), 16);
+  const g = parseInt(h.slice(2, 4), 16);
+  const b = parseInt(h.slice(4, 6), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
 export function listAccentColor(
   list: { color?: string | null },
   _index: number,
