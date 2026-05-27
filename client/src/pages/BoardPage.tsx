@@ -1,4 +1,5 @@
 import { useEffect, useState, useCallback, useMemo, useRef } from 'react';
+import { flushSync } from 'react-dom';
 import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   DndContext,
@@ -85,9 +86,6 @@ export default function BoardPage() {
 
   // Drop indicator element (DOM-based for zero re-render cost)
   const dropIndicatorRef = useRef<HTMLDivElement | null>(null);
-  // Pending indicator-positioning rAF, so drag end can cancel it before it
-  // repaints a stray line over the just-dropped card.
-  const indicatorRafRef = useRef<number | null>(null);
 
   // Create drop indicator element once. It's a fixed-position overlay so its
   // viewport Y can follow the pointer regardless of any list's scroll state —
@@ -323,54 +321,54 @@ export default function BoardPage() {
         }
       }
 
-      // Apply the live reorder (same-list: only when the index actually changed).
+      // Apply the live reorder synchronously. flushSync forces React to commit
+      // the Zustand update before the next line measures the DOM; without it the
+      // commit lands a frame (or more) later, so the placeholder we measure is
+      // still at its *previous* slot and the indicator trails the real drop
+      // point — the "blue line sits several inches above the card" symptom, made
+      // permanent because a stationary pointer fires no further frames to catch
+      // up. This is a native dnd-kit event handler, not a React lifecycle, so
+      // flushSync is safe here. Same-list: only reorder when the index changed.
       if (fromListId === overListId) {
         const list = currentLists.find((l) => l.id === fromListId);
         const currentIndex = list?.cards.findIndex((c) => c.id === activeCardId) ?? -1;
         if (insertIndex !== currentIndex) {
-          moveCardLocally(activeCardId, fromListId, overListId, insertIndex);
+          flushSync(() => moveCardLocally(activeCardId, fromListId, overListId, insertIndex));
         }
       } else {
-        moveCardLocally(activeCardId, fromListId, overListId, insertIndex);
+        flushSync(() => moveCardLocally(activeCardId, fromListId, overListId, insertIndex));
       }
 
       // Anchor the indicator to the TOP EDGE of the dragged card's own
       // placeholder. After the reorder above, the placeholder (opacity:0 but
       // still occupying its slot) sits exactly where the card will land, so its
-      // top is precisely the drop boundary — no off-by-one toward the card
-      // below. Read it on the next frame so the DOM reflects the state update
-      // (React flushes before paint); this also keeps the line correct while the
-      // pointer is stationary, since the last frame placed it at the real gap.
-      if (indicatorRafRef.current != null) cancelAnimationFrame(indicatorRafRef.current);
-      indicatorRafRef.current = requestAnimationFrame(() => {
-        indicatorRafRef.current = null;
-        // Drag already ended — don't repaint a line over the dropped card.
-        if (activeIdRef.current == null) return;
-        const indicator = dropIndicatorRef.current;
-        if (!indicator) return;
-        const placeholderEl = document.querySelector(
-          `[data-card-id="${activeCardId}"]`,
-        ) as HTMLElement | null;
-        const listElNow = document.querySelector(
-          `[data-list-id="${overListId}"]`,
-        ) as HTMLElement | null;
-        if (!placeholderEl || !listElNow) {
-          indicator.style.display = 'none';
-          return;
-        }
-        const cardRect = placeholderEl.getBoundingClientRect();
-        const listRect = listElNow.getBoundingClientRect();
-        // Clamp to the list's visible scroll viewport so the line never
-        // disappears above/below when cards are scrolled off-screen.
-        const clampedY = Math.max(
-          listRect.top + 2,
-          Math.min(listRect.bottom - 2, cardRect.top),
-        );
-        indicator.style.top = `${clampedY - 1.5}px`;
-        indicator.style.left = `${listRect.left + 8}px`;
-        indicator.style.width = `${Math.max(0, listRect.width - 16)}px`;
-        indicator.style.display = 'block';
-      });
+      // top is precisely the drop boundary. Reading it synchronously — the move
+      // is already committed — keeps the line locked to the gap even while the
+      // pointer is stationary.
+      const indicator = dropIndicatorRef.current;
+      if (!indicator) return;
+      const placeholderEl = document.querySelector(
+        `[data-card-id="${activeCardId}"]`,
+      ) as HTMLElement | null;
+      const listElNow = document.querySelector(
+        `[data-list-id="${overListId}"]`,
+      ) as HTMLElement | null;
+      if (!placeholderEl || !listElNow) {
+        indicator.style.display = 'none';
+        return;
+      }
+      const cardRect = placeholderEl.getBoundingClientRect();
+      const listRect = listElNow.getBoundingClientRect();
+      // Clamp to the list's visible scroll viewport so the line never
+      // disappears above/below when cards are scrolled off-screen.
+      const clampedY = Math.max(
+        listRect.top + 2,
+        Math.min(listRect.bottom - 2, cardRect.top),
+      );
+      indicator.style.top = `${clampedY - 1.5}px`;
+      indicator.style.left = `${listRect.left + 8}px`;
+      indicator.style.width = `${Math.max(0, listRect.width - 16)}px`;
+      indicator.style.display = 'block';
     },
     [moveCardLocally],
   );
@@ -379,12 +377,7 @@ export default function BoardPage() {
     async (event: DragEndEvent) => {
       const { active, over } = event;
 
-      // Hide drop indicator and cancel any pending reposition so it can't
-      // repaint a stray line over the just-dropped card.
-      if (indicatorRafRef.current != null) {
-        cancelAnimationFrame(indicatorRafRef.current);
-        indicatorRafRef.current = null;
-      }
+      // Hide the drop indicator so it can't linger over the just-dropped card.
       if (dropIndicatorRef.current) dropIndicatorRef.current.style.display = 'none';
 
       // Clean up drag state

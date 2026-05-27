@@ -194,6 +194,10 @@ export default function MobileBoardView({
   const common = useCommonActions({
     workspaceId,
     activeTab,
+    onBoards: () => {
+      setShowInbox(false);
+      setShowSearch(false);
+    },
     onNotifications: () => {
       setShowSearch(false);
       setShowInbox((v) => !v);

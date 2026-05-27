@@ -174,6 +174,7 @@ export type MobileTabKey = 'boards' | 'notifications' | 'search' | null;
 export function useCommonActions(opts: {
   workspaceId?: string;
   activeTab?: MobileTabKey;
+  onBoards?: () => void;
   onNotifications: () => void;
   onSearch: () => void;
 }) {
@@ -186,6 +187,11 @@ export function useCommonActions(opts: {
     icon: Icon.Boards,
     active: opts.activeTab === 'boards',
     onClick: () => {
+      // Close any open overlay first. On the workspace screen the navigate
+      // below is a no-op (already at that route), so without this the inbox /
+      // search sheet would stay up and tapping Boards would appear to do
+      // nothing until a full reload.
+      opts.onBoards?.();
       if (opts.workspaceId) navigate(`/w/${opts.workspaceId}`);
     },
   });

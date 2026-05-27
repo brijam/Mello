@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type KeyboardEvent } from 'react';
 import MarkdownRenderer from './MarkdownRenderer.js';
 import { MARKDOWN_SYNTAX } from './markdownSyntax.js';
 
@@ -117,6 +117,21 @@ export default function MarkdownEditor({
   const [sel, setSel] = useState<{ start: number; end: number }>({ start: 0, end: 0 });
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const backdropRef = useRef<HTMLDivElement>(null);
+
+  // React's `onSelect` on a textarea only fires once the mouse is released, so
+  // a click-and-drag selection wouldn't highlight until release. The native
+  // `selectionchange` event fires continuously during the drag, so mirror the
+  // selection from it while this textarea holds focus (the activeElement guard
+  // keeps it from reacting to selections in other inputs).
+  useEffect(() => {
+    const onSelectionChange = () => {
+      const ta = textareaRef.current;
+      if (!ta || document.activeElement !== ta) return;
+      setSel({ start: ta.selectionStart, end: ta.selectionEnd });
+    };
+    document.addEventListener('selectionchange', onSelectionChange);
+    return () => document.removeEventListener('selectionchange', onSelectionChange);
+  }, []);
 
   // Keep the backdrop scrolled in lockstep with the textarea so the highlight
   // stays under the right glyphs once the content overflows.
