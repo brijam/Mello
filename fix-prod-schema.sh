@@ -19,13 +19,19 @@
 #
 # WHAT IT DOES (against the REAL prod DB from $ENV_FILE):
 #   1. optional db-only backup
-#   2. drizzle-kit migrate                         (journaled: 0000, 0002–0005)
-#   3. psql -f 0001_search_vectors.sql             (the un-journaled migration)
-#   4. verifies every column/table the code needs now exists
-#   5. restarts the systemd service
+#   2. applies every migration SQL file (except the 0000 base schema) directly
+#      with psql — NOT `drizzle-kit migrate`, because drizzle-kit is a dev
+#      dependency that isn't installed on prod ("cannot find drizzle-kit").
+#      All post-0000 migrations are additive and idempotent (ADD COLUMN IF NOT
+#      EXISTS / DO $$ … EXCEPTION / CREATE OR REPLACE / DROP … IF EXISTS), so
+#      re-running them is safe. This also covers 0001_search_vectors, which is
+#      missing from the drizzle journal and would never be applied by migrate.
+#   3. verifies every column/table the code needs now exists
+#   4. restarts the systemd service
 #
-# Every step is idempotent and safe to re-run. Run on the box as a user who can
-# read $ENV_FILE and sudo-restart the service.
+# Every step is idempotent and safe to re-run. Needs only psql (no node /
+# drizzle-kit). Run on the box as a user who can read $ENV_FILE and
+# sudo-restart the service.
 
 # Re-exec under bash if started by a non-bash shell (e.g. `sh fix-prod-schema.sh`).
 # This script uses bash arrays, [[ ]], and `set -o pipefail`, so it must run in
@@ -38,7 +44,7 @@ REPO_DIR="${REPO_DIR:-/opt/mello-repo}"
 ENV_FILE="${ENV_FILE:-/etc/mello/mello.env}"
 SERVICE_NAME="${SERVICE_NAME:-mello}"
 BACKUP_SCRIPT="${REPO_DIR}/backup-prod.sh"
-SEARCH_MIGRATION="${REPO_DIR}/server/src/db/migrations/0001_search_vectors.sql"
+MIG_DIR="${REPO_DIR}/server/src/db/migrations"
 
 SKIP_BACKUP=0
 SKIP_RESTART=0
@@ -92,19 +98,30 @@ if [[ "$SKIP_BACKUP" != "1" ]]; then
   fi
 fi
 
-# ── 2. Apply journaled migrations to the real prod DB ─────────────────────────
-echo "==> drizzle-kit migrate -> ${DB_REDACTED}"
-( cd "${REPO_DIR}/server" && DATABASE_URL="$DATABASE_URL" npx drizzle-kit migrate )
+# ── 2. Apply migration SQL directly via psql ─────────────────────────────────
+# Apply every *.sql except the 0000 base schema (already present — the app runs;
+# 0000's CREATE TABLEs are not idempotent and would error). Bash sorts the glob,
+# so files apply in 0001,0002,…,NNNN order.
+[[ -d "$MIG_DIR" ]] || { echo "Migrations dir not found: ${MIG_DIR}" >&2; exit 1; }
+shopt -s nullglob
+mig_files=("$MIG_DIR"/*.sql)
+(( ${#mig_files[@]} > 0 )) || { echo "No migration .sql files in ${MIG_DIR}" >&2; exit 1; }
 
-# ── 3. Apply the un-journaled 0001_search_vectors migration (idempotent) ──────
-if [[ -f "$SEARCH_MIGRATION" ]]; then
-  echo "==> Applying 0001_search_vectors (missing from drizzle journal)"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$SEARCH_MIGRATION" >/dev/null
-else
-  echo "WARN: ${SEARCH_MIGRATION} not found — skipping search-vector step" >&2
-fi
+echo "==> Applying migrations to ${DB_REDACTED}"
+applied=0
+for sql in "${mig_files[@]}"; do
+  base="$(basename "$sql")"
+  if [[ "$base" == 0000_* ]]; then
+    echo "    skip ${base} (base schema, already present)"
+    continue
+  fi
+  echo "    apply ${base}"
+  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -q -f "$sql" >/dev/null
+  applied=$((applied + 1))
+done
+echo "    applied ${applied} migration file(s)"
 
-# ── 4. Verify every column/table the deployed code requires ───────────────────
+# ── 3. Verify every column/table the deployed code requires ───────────────────
 echo "==> Verifying schema"
 missing=()
 
@@ -139,7 +156,7 @@ if (( ${#missing[@]} > 0 )); then
 fi
 echo "    all required columns/tables present"
 
-# ── 5. Restart the service ────────────────────────────────────────────────────
+# ── 4. Restart the service ────────────────────────────────────────────────────
 if [[ "$SKIP_RESTART" != "1" ]]; then
   echo "==> Restarting ${SERVICE_NAME}"
   sudo systemctl restart "$SERVICE_NAME"

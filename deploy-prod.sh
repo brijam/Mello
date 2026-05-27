@@ -70,10 +70,13 @@ if [[ "$SKIP_BACKUP" != "1" ]]; then
 fi
 
 if [[ "$SKIP_INSTALL" != "1" ]]; then
-  echo "==> npm ci"
+  echo "==> npm ci --include=dev"
   # Clean install from the committed lockfile — never mutates package*.json,
   # so the deployed tree can't drift from the repo (and never auto-"fixes" audits).
-  npm ci
+  # --include=dev: the migrate step below needs drizzle-kit, which is a devDep;
+  # since we source the prod env above (which may set NODE_ENV=production), npm
+  # would otherwise omit devDependencies and leave "cannot find drizzle-kit".
+  npm ci --include=dev
 fi
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
