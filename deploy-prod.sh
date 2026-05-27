@@ -48,6 +48,13 @@ done
 [[ -d "$REPO_DIR/.git" ]] || { echo "Not a git repo: ${REPO_DIR}" >&2; exit 1; }
 [[ -r "$ENV_FILE" ]] || { echo "Cannot read ${ENV_FILE}" >&2; exit 1; }
 
+# Load the prod env (DATABASE_URL, etc.) so the backup and migrate steps target
+# the SAME database the systemd service uses. Without this, drizzle-kit falls
+# back to the localhost default baked into drizzle.config.ts/config.ts and would
+# "successfully" migrate the wrong database, leaving prod's schema stale.
+set -a; . "$ENV_FILE"; set +a
+[[ -n "${DATABASE_URL:-}" ]] || { echo "DATABASE_URL not set in ${ENV_FILE}" >&2; exit 1; }
+
 cd "$REPO_DIR"
 
 CUR_SHA="$(git rev-parse HEAD)"
@@ -75,8 +82,13 @@ if [[ "$SKIP_BUILD" != "1" ]]; then
 fi
 
 if [[ "$SKIP_MIGRATE" != "1" ]]; then
-  echo "==> drizzle-kit migrate"
-  (cd server && npx drizzle-kit migrate)
+  # Mask credentials when echoing the target so the journal/log shows host+db
+  # but not the password.
+  DB_REDACTED="$(printf '%s' "$DATABASE_URL" | sed -E 's#//[^@]*@#//***@#')"
+  echo "==> drizzle-kit migrate -> ${DB_REDACTED}"
+  # Pass DATABASE_URL explicitly so drizzle-kit can't silently use its localhost
+  # default even if the subshell loses the exported env.
+  (cd server && DATABASE_URL="$DATABASE_URL" npx drizzle-kit migrate)
 fi
 
 echo "==> Restarting ${SERVICE_NAME}"
