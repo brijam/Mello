@@ -26,6 +26,12 @@
 #
 # Every step is idempotent and safe to re-run. Run on the box as a user who can
 # read $ENV_FILE and sudo-restart the service.
+
+# Re-exec under bash if started by a non-bash shell (e.g. `sh fix-prod-schema.sh`).
+# This script uses bash arrays, [[ ]], and `set -o pipefail`, so it must run in
+# bash regardless of how it was invoked. (This guard line is POSIX sh-safe.)
+if [ -z "${BASH_VERSION:-}" ]; then exec bash "$0" "$@"; fi
+
 set -euo pipefail
 
 REPO_DIR="${REPO_DIR:-/opt/mello-repo}"
