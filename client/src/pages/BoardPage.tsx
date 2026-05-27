@@ -86,6 +86,12 @@ export default function BoardPage() {
 
   // Drop indicator element (DOM-based for zero re-render cost)
   const dropIndicatorRef = useRef<HTMLDivElement | null>(null);
+  // Live cursor Y in viewport coords. dnd-kit's event.delta.y accumulates the
+  // scroll of scrollable ancestors, so reconstructing the pointer as
+  // (activatorY + delta.y) drifts once a long list is scrolled — which is
+  // exactly when the drop line lands above the card or snaps to the top. Track
+  // the real pointer position straight from the DOM instead.
+  const pointerYRef = useRef(0);
 
   // Create drop indicator element once. It's a fixed-position overlay so its
   // viewport Y can follow the pointer regardless of any list's scroll state —
@@ -101,6 +107,24 @@ export default function BoardPage() {
     return () => {
       el.remove();
       dropIndicatorRef.current = null;
+    };
+  }, []);
+
+  // Track the live cursor Y (see pointerYRef). Passive listeners just stash a
+  // number, so the cost is negligible even outside a drag.
+  useEffect(() => {
+    const onPointer = (e: PointerEvent | MouseEvent) => {
+      pointerYRef.current = e.clientY;
+    };
+    const onTouch = (e: TouchEvent) => {
+      const t = e.touches[0];
+      if (t) pointerYRef.current = t.clientY;
+    };
+    document.addEventListener('pointermove', onPointer, { passive: true });
+    document.addEventListener('touchmove', onTouch, { passive: true });
+    return () => {
+      document.removeEventListener('pointermove', onPointer);
+      document.removeEventListener('touchmove', onTouch);
     };
   }, []);
 
@@ -295,15 +319,9 @@ export default function BoardPage() {
       }
       if (!fromListId) return;
 
-      // Current pointer Y in viewport coords. Touch events expose Y via
-      // touches[0].clientY rather than clientY directly, so handle both.
-      const ae = event.activatorEvent as MouseEvent | TouchEvent | PointerEvent;
-      const startY =
-        'clientY' in ae && typeof (ae as MouseEvent).clientY === 'number'
-          ? (ae as MouseEvent).clientY
-          : (ae as TouchEvent).touches?.[0]?.clientY;
-      if (typeof startY !== 'number') return;
-      const pointerY = startY + event.delta.y;
+      // Live cursor Y in viewport coords, read straight from the DOM (see
+      // pointerYRef) so a scrolled list doesn't skew it.
+      const pointerY = pointerYRef.current;
 
       const listEl = document.querySelector(`[data-list-id="${overListId}"]`) as HTMLElement | null;
       let insertIndex = 0;
