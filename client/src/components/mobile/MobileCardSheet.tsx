@@ -12,6 +12,7 @@ import {
   confirmDiscardIfUnsaved,
 } from '../../stores/unsavedChangesStore.js';
 import LabelBadge from '../board/LabelBadge.js';
+import ImageLightbox from '../common/ImageLightbox.js';
 import MarkdownRenderer from '../card/MarkdownRenderer.js';
 import { MARKDOWN_SYNTAX } from '../card/markdownSyntax.js';
 import { timeAgo } from '../../utils/timeAgo.js';
@@ -83,6 +84,7 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
 
   const [uploading, setUploading] = useState(false);
   const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const lists = useBoardStore((s) => s.lists);
@@ -191,6 +193,17 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
   // Guarded close used by the overlay and the Back button.
   const requestClose = () => {
     if (confirmDiscardIfUnsaved()) onClose();
+  };
+
+  // Tap to view: images open full-size in a lightbox; other files open inline
+  // in a new tab (the browser displays what it can, else downloads).
+  const openAttachment = (a: CardAttachment) => {
+    const url = `/api/v1/attachments/${a.id}/download`;
+    if (a.mimeType.startsWith('image/')) {
+      setLightbox({ src: url, alt: a.filename });
+    } else {
+      window.open(`${url}?disposition=inline`, '_blank', 'noopener,noreferrer');
+    }
   };
 
   async function saveTitle() {
@@ -960,7 +973,9 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
                       gap: 10,
                     }}
                   >
-                    <div
+                    <button
+                      onClick={() => openAttachment(a)}
+                      aria-label={isImage ? `View ${a.filename}` : `Open ${a.filename}`}
                       style={{
                         width: 36,
                         height: 36,
@@ -972,6 +987,9 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
                         justifyContent: 'center',
                         flexShrink: 0,
                         color: D.mute,
+                        border: 'none',
+                        padding: 0,
+                        cursor: 'pointer',
                       }}
                     >
                       {isImage ? (
@@ -990,24 +1008,27 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
                           />
                         </svg>
                       )}
-                    </div>
-                    <a
-                      href={`/api/v1/attachments/${a.id}/download`}
-                      target="_blank"
-                      rel="noopener noreferrer"
+                    </button>
+                    <button
+                      onClick={() => openAttachment(a)}
                       style={{
                         flex: 1,
                         minWidth: 0,
                         fontSize: 14,
                         color: D.ink2,
-                        textDecoration: 'none',
+                        background: 'transparent',
+                        border: 'none',
+                        padding: 0,
+                        textAlign: 'left',
+                        cursor: 'pointer',
                         overflow: 'hidden',
                         textOverflow: 'ellipsis',
                         whiteSpace: 'nowrap',
+                        fontFamily: MOBILE_FONT_STACK,
                       }}
                     >
                       {a.filename}
-                    </a>
+                    </button>
                     <button
                       onClick={() => deleteAttachment(a.id)}
                       aria-label={`Delete ${a.filename}`}
@@ -1142,6 +1163,10 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
         </Sheet>
       )}
     </div>
+
+    {lightbox && (
+      <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />
+    )}
     </div>
   );
 }

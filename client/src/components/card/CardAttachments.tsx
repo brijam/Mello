@@ -1,4 +1,5 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
+import ImageLightbox from '../common/ImageLightbox.js';
 
 interface Attachment {
   id: string;
@@ -36,6 +37,7 @@ export default function CardAttachments({ cardId, attachments, onRefresh, curren
   const [uploading, setUploading] = useState(false);
   const [dragOver, setDragOver] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [lightbox, setLightbox] = useState<{ src: string; alt: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const uploadFile = useCallback(async (file: File) => {
@@ -159,6 +161,17 @@ export default function CardAttachments({ cardId, attachments, onRefresh, curren
 
   const isImage = (mimeType: string) => mimeType.startsWith('image/');
 
+  // Click to view: images open full-size in an in-app lightbox; other files
+  // open inline in a new tab (the browser displays what it can, else downloads).
+  const openAttachment = (att: Attachment) => {
+    const url = `/api/v1/attachments/${att.id}/download`;
+    if (isImage(att.mimeType)) {
+      setLightbox({ src: url, alt: att.filename });
+    } else {
+      window.open(`${url}?disposition=inline`, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   return (
     <div>
       {/* Drop zone */}
@@ -212,7 +225,12 @@ export default function CardAttachments({ cardId, attachments, onRefresh, curren
               className="flex items-center gap-3 bg-gray-50 rounded-lg p-3 group"
             >
               {/* Thumbnail or icon */}
-              <div className="flex-shrink-0 w-12 h-12 rounded bg-gray-200 flex items-center justify-center overflow-hidden">
+              <button
+                type="button"
+                onClick={() => openAttachment(att)}
+                title={isImage(att.mimeType) ? 'View image' : 'Open file'}
+                className="flex-shrink-0 w-12 h-12 rounded bg-gray-200 flex items-center justify-center overflow-hidden cursor-pointer hover:opacity-90"
+              >
                 {isImage(att.mimeType) ? (
                   <img
                     src={`/api/v1/attachments/${att.id}/download`}
@@ -224,18 +242,18 @@ export default function CardAttachments({ cardId, attachments, onRefresh, curren
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
                 )}
-              </div>
+              </button>
 
               {/* File info */}
               <div className="flex-1 min-w-0">
-                <a
-                  href={`/api/v1/attachments/${att.id}/download`}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="text-sm font-medium text-blue-700 hover:text-blue-800 hover:underline truncate block"
+                <button
+                  type="button"
+                  onClick={() => openAttachment(att)}
+                  title={isImage(att.mimeType) ? 'View image' : 'Open file'}
+                  className="text-sm font-medium text-blue-700 hover:text-blue-800 hover:underline truncate block max-w-full text-left"
                 >
                   {att.filename}
-                </a>
+                </button>
                 <p className="text-sm text-gray-500 mt-0.5">
                   {formatFileSize(att.sizeBytes)} -- {formatDate(att.createdAt)}
                 </p>
@@ -279,6 +297,10 @@ export default function CardAttachments({ cardId, attachments, onRefresh, curren
             </div>
           ))}
         </div>
+      )}
+
+      {lightbox && (
+        <ImageLightbox src={lightbox.src} alt={lightbox.alt} onClose={() => setLightbox(null)} />
       )}
     </div>
   );

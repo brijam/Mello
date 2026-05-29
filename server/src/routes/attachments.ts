@@ -76,6 +76,7 @@ export async function attachmentRoutes(app: FastifyInstance) {
     preHandler: [requireAuth],
   }, async (request, reply) => {
     const { id } = request.params as { id: string };
+    const { disposition } = request.query as { disposition?: string };
 
     const [attachment] = await db.select().from(attachments).where(eq(attachments.id, id));
     if (!attachment) {
@@ -83,10 +84,24 @@ export async function attachmentRoutes(app: FastifyInstance) {
     }
 
     const fileBuffer = await fs.readFile(attachment.storagePath);
-    return reply
+
+    // RFC 5987 filename* encoding avoids header injection from quotes/newlines.
+    const encodedName = encodeURIComponent(attachment.filename);
+    const inline = disposition === 'inline';
+
+    const res = reply
       .type(attachment.mimeType ?? 'application/octet-stream')
-      .header('content-disposition', `attachment; filename="${attachment.filename}"`)
-      .send(fileBuffer);
+      .header('content-disposition', `${inline ? 'inline' : 'attachment'}; filename*=UTF-8''${encodedName}`);
+
+    if (inline) {
+      // Render uploaded files inline (images, PDFs, text) without letting
+      // HTML/SVG execute scripts in our origin. A scripts-less sandbox treats
+      // the response as an opaque origin; nosniff stops content-type guessing.
+      res.header('content-security-policy', 'sandbox');
+      res.header('x-content-type-options', 'nosniff');
+    }
+
+    return res.send(fileBuffer);
   });
 
   // Delete attachment
