@@ -124,25 +124,21 @@ export default function MobileListMenu({ list, onClose }: ListMenuProps) {
               padding: '8px 18px 18px',
             }}
           >
-            <ColorSwatch
-              color={null}
-              active={list.color === null}
-              onClick={async () => {
-                await updateList(list.id, { color: null });
-                close();
-              }}
-            />
-            {LIST_COLOR_PRESETS.map((c) => (
-              <ColorSwatch
-                key={c}
-                color={c}
-                active={list.color?.toLowerCase() === c.toLowerCase()}
-                onClick={async () => {
-                  await updateList(list.id, { color: c });
-                  close();
-                }}
-              />
-            ))}
+            {LIST_COLOR_PRESETS.map((c) => {
+              const isActive = list.color?.toLowerCase() === c.toLowerCase();
+              return (
+                <ColorSwatch
+                  key={c}
+                  color={c}
+                  active={isActive}
+                  onClick={async () => {
+                    // Clicking the active color clears it back to no color.
+                    await updateList(list.id, { color: isActive ? null : c });
+                    close();
+                  }}
+                />
+              );
+            })}
             <CustomColorSwatch
               active={
                 !!list.color &&
@@ -429,49 +425,26 @@ function ColorSwatch({
   active,
   onClick,
 }: {
-  color: string | null;
+  color: string;
   active: boolean;
   onClick: () => void;
 }) {
   return (
     <button
       onClick={onClick}
-      aria-label={color ?? 'No color'}
+      aria-label={active ? `${color} (tap to clear)` : color}
+      title={active ? 'Tap to clear' : undefined}
       style={{
         width: 36,
         height: 36,
         borderRadius: 18,
         border: 'none',
         padding: 0,
-        background: color ?? 'transparent',
-        boxShadow: active
-          ? `inset 0 0 0 2px ${D.bg}, 0 0 0 2px ${D.ink}`
-          : color
-            ? 'none'
-            : `inset 0 0 0 1px ${D.hair3}`,
+        background: color,
+        boxShadow: active ? `inset 0 0 0 2px ${D.bg}, 0 0 0 2px ${D.ink}` : 'none',
         cursor: 'pointer',
         position: 'relative',
       }}
-    >
-      {!color && (
-        <svg
-          width="36"
-          height="36"
-          viewBox="0 0 36 36"
-          fill="none"
-          style={{ position: 'absolute', inset: 0 }}
-        >
-          <line
-            x1="8"
-            y1="28"
-            x2="28"
-            y2="8"
-            stroke={D.mute}
-            strokeWidth="1.5"
-            strokeLinecap="round"
-          />
-        </svg>
-      )}
-    </button>
+    />
   );
 }
