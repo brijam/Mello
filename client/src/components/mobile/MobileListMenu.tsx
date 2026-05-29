@@ -3,7 +3,7 @@
 
 import { useState } from 'react';
 import { useBoardStore } from '../../stores/boardStore.js';
-import { D, MOBILE_FONT_STACK, MOBILE_PALETTE } from './mobileTheme.js';
+import { D, MOBILE_FONT_STACK, LIST_COLOR_PRESETS } from './mobileTheme.js';
 
 interface ListMenuProps {
   list: { id: string; name: string; color: string | null };
@@ -132,17 +132,28 @@ export default function MobileListMenu({ list, onClose }: ListMenuProps) {
                 close();
               }}
             />
-            {MOBILE_PALETTE.map((c) => (
+            {LIST_COLOR_PRESETS.map((c) => (
               <ColorSwatch
                 key={c}
                 color={c}
-                active={list.color === c}
+                active={list.color?.toLowerCase() === c.toLowerCase()}
                 onClick={async () => {
                   await updateList(list.id, { color: c });
                   close();
                 }}
               />
             ))}
+            <CustomColorSwatch
+              active={
+                !!list.color &&
+                !LIST_COLOR_PRESETS.some((c) => c.toLowerCase() === list.color!.toLowerCase())
+              }
+              current={list.color ?? '#5BA8FF'}
+              onPick={async (hex) => {
+                await updateList(list.id, { color: hex });
+                close();
+              }}
+            />
           </div>
           <CancelRow onClick={() => setMode('menu')} label="Back" />
         </>
@@ -367,6 +378,49 @@ function SecondaryButton({ children, onClick }: { children: React.ReactNode; onC
     >
       {children}
     </button>
+  );
+}
+
+/** Opens the native color picker; shows a rainbow until a custom color is set. */
+function CustomColorSwatch({
+  current,
+  active,
+  onPick,
+}: {
+  current: string;
+  active: boolean;
+  onPick: (hex: string) => void;
+}) {
+  const rainbow =
+    'conic-gradient(from 0deg, #FF5B5B, #FFB85B, #FFE15B, #5BE07A, #5BE0CD, #5BA8FF, #A88FFF, #FF8FBE, #FF5B5B)';
+  return (
+    <div
+      style={{
+        position: 'relative',
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        background: active ? current : rainbow,
+        boxShadow: active ? `inset 0 0 0 2px ${D.bg}, 0 0 0 2px ${D.ink}` : 'none',
+      }}
+    >
+      <input
+        type="color"
+        aria-label="Custom color"
+        value={active ? current : '#5BA8FF'}
+        onChange={(e) => onPick(e.target.value)}
+        style={{
+          position: 'absolute',
+          inset: 0,
+          width: '100%',
+          height: '100%',
+          opacity: 0,
+          border: 'none',
+          padding: 0,
+          cursor: 'pointer',
+        }}
+      />
+    </div>
   );
 }
 

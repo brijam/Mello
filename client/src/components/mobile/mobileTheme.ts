@@ -31,6 +31,24 @@ export const MOBILE_PALETTE = [
   D.teal,
 ] as const;
 
+// 13 default list colors offered by the mobile list color picker, tuned to
+// read well as dots/tints on the dark UI. Lists may also store a custom hex.
+export const LIST_COLOR_PRESETS = [
+  '#FF6B5B', // coral
+  '#FF8F5B', // orange
+  '#FFB85B', // amber
+  '#FFE15B', // yellow
+  '#B8FF5B', // lime
+  '#5BE07A', // green
+  '#5BE0CD', // teal
+  '#5BA8FF', // sky
+  '#5B7CFF', // blue
+  '#A88FFF', // violet
+  '#D58FFF', // purple
+  '#FF8FBE', // pink
+  '#FF5B8A', // rose
+] as const;
+
 export const MOBILE_FONT_STACK =
   '-apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", system-ui, sans-serif';
 
