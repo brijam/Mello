@@ -66,10 +66,13 @@ export default function CardComments({ cardId }: CardCommentsProps) {
 
   const currentUser = useAuthStore((s) => s.user);
 
-  // Flag a non-empty comment draft (new or in-progress edit) as unsaved.
+  // Flag a non-empty new draft, or an in-progress edit that changed the
+  // comment, as unsaved. (Opening Edit alone seeds the original body, so
+  // compare against it rather than just checking non-empty.)
+  const editingComment = comments.find((c) => c.id === editingId);
   useUnsavedFlag(
     `comment:${cardId}`,
-    newBody.trim() !== '' || (editingId !== null && editBody.trim() !== ''),
+    newBody.trim() !== '' || (editingId !== null && editBody !== (editingComment?.body ?? '')),
   );
 
   const fetchComments = async () => {
