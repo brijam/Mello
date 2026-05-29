@@ -3,12 +3,12 @@
 // directly (e.g. "#1abc9c"). Names mirror LABEL_COLORS in @mello/shared.
 const NAMED_HEX: Record<string, string> = {
   green: '#22c55e',
-  yellow: '#eab308',
+  yellow: '#facc15',
   orange: '#f97316',
   red: '#ef4444',
   purple: '#a855f7',
   blue: '#3b82f6',
-  sky: '#0ea5e9',
+  sky: '#38bdf8',
   lime: '#84cc16',
   pink: '#ec4899',
   black: '#1f2937',
