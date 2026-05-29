@@ -1,13 +1,23 @@
-import { useEffect, useRef, useCallback } from 'react';
+import { useEffect, useRef, useCallback, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useNavigate } from 'react-router-dom';
 import { useSearchStore } from '../../stores/searchStore.js';
 
-export default function SearchBar() {
+interface SearchBarProps {
+  /** When set, an "only this board" scope toggle is shown (defaults to on). */
+  boardId?: string;
+  boardName?: string;
+}
+
+export default function SearchBar({ boardId, boardName }: SearchBarProps = {}) {
   const navigate = useNavigate();
   const { query, results, loading, isOpen, setQuery, search, open, close } = useSearchStore();
   const inputRef = useRef<HTMLInputElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Scope to the current board by default; ignored when no boardId is provided.
+  const [thisBoardOnly, setThisBoardOnly] = useState(true);
+  const scopeBoardId = boardId && thisBoardOnly ? boardId : undefined;
 
   // Expose the input ref globally so keyboard shortcuts can focus it
   useEffect(() => {
@@ -22,11 +32,20 @@ export default function SearchBar() {
       setQuery(value);
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
-        search(value);
+        search(value, scopeBoardId);
       }, 300);
     },
-    [setQuery, search],
+    [setQuery, search, scopeBoardId],
   );
+
+  const handleScopeChange = (nextThisBoardOnly: boolean) => {
+    setThisBoardOnly(nextThisBoardOnly);
+    // Cancel any in-flight debounced search so it can't re-run with the old scope.
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    if (query.trim()) {
+      search(query, boardId && nextThisBoardOnly ? boardId : undefined);
+    }
+  };
 
   const handleResultClick = (boardId: string, cardId: string) => {
     close();
@@ -90,9 +109,26 @@ export default function SearchBar() {
                   placeholder="Search for cards, descriptions, comments..."
                   className="w-full text-lg px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 text-gray-900"
                 />
-                <p className="text-sm text-gray-500 mt-2">
-                  Press <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-sm font-mono">Esc</kbd> to close
-                </p>
+                <div className="flex items-center justify-between mt-2">
+                  <p className="text-sm text-gray-500">
+                    Press <kbd className="px-1.5 py-0.5 bg-gray-100 border border-gray-300 rounded text-sm font-mono">Esc</kbd> to close
+                  </p>
+                  {boardId && (
+                    <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={thisBoardOnly}
+                        onChange={(e) => handleScopeChange(e.target.checked)}
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span>
+                        {thisBoardOnly
+                          ? `This board${boardName ? ` (${boardName})` : ''}`
+                          : 'All boards'}
+                      </span>
+                    </label>
+                  )}
+                </div>
               </div>
 
               {/* Results */}
@@ -145,7 +181,11 @@ export default function SearchBar() {
 
                 {!loading && !query.trim() && (
                   <div className="py-8 text-center">
-                    <p className="text-base text-gray-500">Start typing to search across all your boards</p>
+                    <p className="text-base text-gray-500">
+                      {scopeBoardId
+                        ? `Start typing to search ${boardName ? `“${boardName}”` : 'this board'}`
+                        : 'Start typing to search across all your boards'}
+                    </p>
                   </div>
                 )}
               </div>

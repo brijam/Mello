@@ -507,7 +507,7 @@ export default function BoardPage() {
             currentColor={board.backgroundValue}
             onColorChange={(color) => updateBoard(board.id, { backgroundType: 'color', backgroundValue: color })}
           />
-          <SearchBar />
+          <SearchBar boardId={board.id} boardName={board.name} />
           {/* Filter button */}
           <div className="relative" ref={filterRef}>
             <button

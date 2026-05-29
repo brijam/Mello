@@ -21,7 +21,7 @@ interface SearchState {
   isOpen: boolean;
   nextCursor: string | null;
   setQuery: (q: string) => void;
-  search: (q: string) => Promise<void>;
+  search: (q: string, boardId?: string) => Promise<void>;
   open: () => void;
   close: () => void;
   clear: () => void;
@@ -36,15 +36,17 @@ export const useSearchStore = create<SearchState>((set) => ({
 
   setQuery: (query) => set({ query }),
 
-  search: async (q) => {
+  search: async (q, boardId) => {
     if (!q.trim()) {
       set({ results: [], loading: false, nextCursor: null });
       return;
     }
     set({ loading: true });
     try {
+      const params = new URLSearchParams({ q });
+      if (boardId) params.set('boardId', boardId);
       const data = await api.get<{ results: SearchResult[]; nextCursor: string | null }>(
-        `/search?q=${encodeURIComponent(q)}`,
+        `/search?${params.toString()}`,
       );
       set({ results: data.results, nextCursor: data.nextCursor, loading: false });
     } catch {
