@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useBoardStore } from '../../stores/boardStore.js';
 import { api } from '../../api/client.js';
-import { getLabelColorClass } from '../../utils/labelColors.js';
+import { resolveLabelColor, readableTextColor } from '../../utils/labelColors.js';
 import LabelEditor from '../board/LabelEditor.js';
 
 interface LabelPickerProps {
@@ -71,7 +71,8 @@ export default function LabelPicker({ cardId, boardId, cardLabelIds, onToggle, o
               <button
                 onClick={() => handleToggle(label.id)}
                 disabled={toggling === label.id}
-                className={`${getLabelColorClass(label.color)} flex-1 flex items-center justify-between rounded px-3 py-1.5 text-sm text-white font-medium hover:opacity-90 disabled:opacity-50`}
+                className="flex-1 flex items-center justify-between rounded px-3 py-1.5 text-sm font-medium hover:opacity-90 disabled:opacity-50"
+                style={{ backgroundColor: resolveLabelColor(label.color), color: readableTextColor(label.color) }}
               >
                 <span>{label.name || '\u00A0'}</span>
                 {isAssigned && (

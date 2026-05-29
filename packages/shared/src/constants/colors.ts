@@ -9,6 +9,9 @@ export const LABEL_COLORS = [
   'lime',
   'pink',
   'black',
+  'teal',
+  'indigo',
+  'rose',
 ] as const;
 
 export const BOARD_BACKGROUND_COLORS = [

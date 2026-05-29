@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { LABEL_COLORS } from '@mello/shared';
 import { api } from '../../api/client.js';
-import { getLabelColorClass } from '../../utils/labelColors.js';
+import { resolveLabelColor, readableTextColor } from '../../utils/labelColors.js';
 
 interface LabelEditorProps {
   boardId: string;
@@ -16,6 +16,10 @@ export default function LabelEditor({ boardId, label, onSave, onCancel }: LabelE
   const [saving, setSaving] = useState(false);
 
   const isEditing = !!label;
+
+  const isCustomHex = color.startsWith('#');
+  // A custom hex must be complete (#rrggbb) before it can be saved.
+  const customValid = !isCustomHex || /^#[0-9a-fA-F]{6}$/.test(color);
 
   async function handleSave() {
     setSaving(true);
@@ -66,18 +70,56 @@ export default function LabelEditor({ boardId, label, onSave, onCancel }: LabelE
             <button
               key={c}
               onClick={() => setColor(c)}
-              className={`${getLabelColorClass(c)} h-8 rounded cursor-pointer ${
+              title={c}
+              style={{ backgroundColor: resolveLabelColor(c) }}
+              className={`h-8 rounded cursor-pointer ${
                 color === c ? 'ring-2 ring-offset-1 ring-gray-700' : ''
               }`}
             />
           ))}
+        </div>
+
+        {/* Custom color */}
+        <div className="mt-2 flex items-center gap-2">
+          <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">Custom</span>
+          <input
+            type="color"
+            aria-label="Custom color"
+            value={resolveLabelColor(color)}
+            onChange={(e) => setColor(e.target.value)}
+            className={`w-8 h-8 rounded cursor-pointer border p-0.5 ${
+              isCustomHex ? 'border-gray-700 ring-2 ring-offset-1 ring-gray-700' : 'border-gray-300'
+            }`}
+          />
+          <input
+            type="text"
+            value={isCustomHex ? color : ''}
+            placeholder="#1abc9c"
+            onChange={(e) => {
+              const v = e.target.value;
+              if (/^#?[0-9a-fA-F]{0,6}$/.test(v)) {
+                setColor(v.startsWith('#') ? v : `#${v}`);
+              }
+            }}
+            className="flex-1 text-sm border border-gray-300 rounded px-2 py-1.5 font-mono focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        {/* Preview */}
+        <div className="mt-2">
+          <span
+            className="inline-flex items-center rounded px-2 py-0.5 text-sm font-medium min-w-[48px]"
+            style={{ backgroundColor: resolveLabelColor(color), color: readableTextColor(color) }}
+          >
+            {name || 'Preview'}
+          </span>
         </div>
       </div>
 
       <div className="flex gap-2">
         <button
           onClick={handleSave}
-          disabled={saving}
+          disabled={saving || !customValid}
           className="flex-1 bg-blue-600 text-white text-sm font-medium py-1.5 rounded hover:bg-blue-700 disabled:opacity-50"
         >
           {saving ? 'Saving...' : isEditing ? 'Save' : 'Create'}

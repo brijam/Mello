@@ -1,4 +1,4 @@
-import { getLabelColorClass } from '../../utils/labelColors.js';
+import { resolveLabelColor } from '../../utils/labelColors.js';
 
 interface FilterPopoverProps {
   labels: Array<{ id: string; name: string | null; color: string }>;
@@ -40,7 +40,6 @@ export default function FilterPopover({
             <div className="flex flex-col gap-1.5">
               {labels.map((label) => {
                 const isActive = activeLabels.includes(label.id);
-                const bgClass = getLabelColorClass(label.color);
                 return (
                   <button
                     key={label.id}
@@ -51,7 +50,7 @@ export default function FilterPopover({
                         : 'hover:bg-gray-100'
                     }`}
                   >
-                    <span className={`${bgClass} inline-block w-10 h-5 rounded`} />
+                    <span className="inline-block w-10 h-5 rounded" style={{ backgroundColor: resolveLabelColor(label.color) }} />
                     <span className="text-sm font-medium text-gray-800 flex-1">
                       {label.name || label.color}
                     </span>

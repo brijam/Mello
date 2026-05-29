@@ -1,18 +1,39 @@
-const COLOR_MAP: Record<string, string> = {
-  green: 'bg-green-500',
-  yellow: 'bg-yellow-400',
-  orange: 'bg-orange-500',
-  red: 'bg-red-500',
-  purple: 'bg-purple-500',
-  blue: 'bg-blue-500',
-  sky: 'bg-sky-400',
-  lime: 'bg-lime-500',
-  pink: 'bg-pink-500',
-  black: 'bg-gray-800',
+// Hex values for the named default label colors. Kept stable so existing
+// labels stored by name keep their look; custom labels store a hex string
+// directly (e.g. "#1abc9c"). Names mirror LABEL_COLORS in @mello/shared.
+const NAMED_HEX: Record<string, string> = {
+  green: '#22c55e',
+  yellow: '#eab308',
+  orange: '#f97316',
+  red: '#ef4444',
+  purple: '#a855f7',
+  blue: '#3b82f6',
+  sky: '#0ea5e9',
+  lime: '#84cc16',
+  pink: '#ec4899',
+  black: '#1f2937',
+  teal: '#14b8a6',
+  indigo: '#6366f1',
+  rose: '#f43f5e',
 };
 
-export function getLabelColorClass(colorName: string): string {
-  return COLOR_MAP[colorName] ?? 'bg-gray-500';
+const FALLBACK = '#6b7280'; // gray-500
+
+/** Resolve any stored label color (named default or custom hex) to a hex string. */
+export function resolveLabelColor(color: string): string {
+  if (!color) return FALLBACK;
+  if (color.startsWith('#')) return color;
+  return NAMED_HEX[color] ?? FALLBACK;
 }
 
-export default COLOR_MAP;
+/** Black or white text, whichever is more legible on the given background. */
+export function readableTextColor(color: string): string {
+  const h = resolveLabelColor(color).replace('#', '');
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h;
+  if (full.length !== 6) return '#ffffff';
+  const r = parseInt(full.slice(0, 2), 16);
+  const g = parseInt(full.slice(2, 4), 16);
+  const b = parseInt(full.slice(4, 6), 16);
+  const luminance = (0.299 * r + 0.587 * g + 0.114 * b) / 255;
+  return luminance > 0.6 ? '#1f2937' : '#ffffff';
+}

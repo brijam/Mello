@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react';
-import { getLabelColorClass } from '../../utils/labelColors.js';
+import { resolveLabelColor } from '../../utils/labelColors.js';
 import FilterPopover from './FilterPopover.js';
 
 interface FilterBarProps {
@@ -75,7 +75,6 @@ export default function FilterBar({
 
       {/* Active filter pills */}
       {activeFilterLabels.map((label) => {
-        const bgClass = getLabelColorClass(label.color);
         return (
           <button
             key={`label-${label.id}`}
@@ -83,7 +82,7 @@ export default function FilterBar({
             className="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-gray-100 hover:bg-gray-200 transition-colors flex-shrink-0"
             title="Click to remove filter"
           >
-            <span className={`${bgClass} inline-block w-3 h-3 rounded-full`} />
+            <span className="inline-block w-3 h-3 rounded-full" style={{ backgroundColor: resolveLabelColor(label.color) }} />
             <span className="text-sm font-medium text-gray-700">{label.name || label.color}</span>
             <svg className="w-3.5 h-3.5 text-gray-400" fill="currentColor" viewBox="0 0 20 20">
               <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />

@@ -1,4 +1,4 @@
-import { getLabelColorClass } from '../../utils/labelColors.js';
+import { resolveLabelColor, readableTextColor } from '../../utils/labelColors.js';
 
 interface LabelBadgeProps {
   color: string;
@@ -7,12 +7,13 @@ interface LabelBadgeProps {
 }
 
 export default function LabelBadge({ color, name, size = 'sm' }: LabelBadgeProps) {
-  const bgClass = getLabelColorClass(color);
+  const bg = resolveLabelColor(color);
 
   if (size === 'sm') {
     return (
       <span
-        className={`${bgClass} inline-block rounded-sm w-10 h-2`}
+        className="inline-block rounded-sm w-10 h-2"
+        style={{ backgroundColor: bg }}
         title={name ?? color}
       />
     );
@@ -20,7 +21,8 @@ export default function LabelBadge({ color, name, size = 'sm' }: LabelBadgeProps
 
   return (
     <span
-      className={`${bgClass} inline-flex items-center rounded px-2 py-0.5 text-sm font-medium text-white min-w-[48px]`}
+      className="inline-flex items-center rounded px-2 py-0.5 text-sm font-medium min-w-[48px]"
+      style={{ backgroundColor: bg, color: readableTextColor(color) }}
     >
       {name ?? ''}
     </span>
