@@ -37,6 +37,7 @@ import AvatarUpload from '../components/common/AvatarUpload.js';
 import BackgroundColorPicker from '../components/board/BackgroundColorPicker.js';
 import MobileBoardView from '../components/board/MobileBoardView.js';
 import { confirmDiscardIfUnsaved } from '../stores/unsavedChangesStore.js';
+import { D } from '../components/mobile/mobileTheme.js';
 
 function useIsMobile(query = '(max-width: 767px)') {
   const [matches, setMatches] = useState(() =>
@@ -463,11 +464,25 @@ export default function BoardPage() {
   }, []);
 
   if (loading) {
-    return <div className="flex items-center justify-center min-h-[100dvh] text-gray-500">Loading board...</div>;
+    return (
+      <div
+        className="flex items-center justify-center min-h-[100dvh] text-gray-500"
+        style={isMobile ? { background: D.bg, color: D.mute } : undefined}
+      >
+        Loading board...
+      </div>
+    );
   }
 
   if (!board) {
-    return <div className="flex items-center justify-center min-h-[100dvh] text-gray-500">Board not found</div>;
+    return (
+      <div
+        className="flex items-center justify-center min-h-[100dvh] text-gray-500"
+        style={isMobile ? { background: D.bg, color: D.mute } : undefined}
+      >
+        Board not found
+      </div>
+    );
   }
 
   const bgStyle = board.backgroundType === 'color'

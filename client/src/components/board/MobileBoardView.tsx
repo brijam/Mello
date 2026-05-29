@@ -218,10 +218,33 @@ export default function MobileBoardView({
   // scroll stays contained. This sidesteps the "drag resets the page to the
   // top" bug seen when sortable updates re-layout the document.
   useEffect(() => {
-    const prev = document.body.style.overflow;
+    const prevOverflow = document.body.style.overflow;
+    const prevBg = document.body.style.background;
     document.body.style.overflow = 'hidden';
+    // The page body (bg-gray-100) otherwise shows light through the safe-area /
+    // overscroll at the screen edges; match the dark mobile theme.
+    document.body.style.background = D.bg;
+
+    // Tint the mobile browser chrome / status bar dark while the board is open.
+    let meta = document.querySelector('meta[name="theme-color"]') as HTMLMetaElement | null;
+    const createdMeta = !meta;
+    const prevThemeColor = meta?.getAttribute('content') ?? null;
+    if (!meta) {
+      meta = document.createElement('meta');
+      meta.setAttribute('name', 'theme-color');
+      document.head.appendChild(meta);
+    }
+    meta.setAttribute('content', D.bg);
+
     return () => {
-      document.body.style.overflow = prev;
+      document.body.style.overflow = prevOverflow;
+      document.body.style.background = prevBg;
+      if (createdMeta) {
+        meta?.remove();
+      } else if (meta) {
+        if (prevThemeColor === null) meta.removeAttribute('content');
+        else meta.setAttribute('content', prevThemeColor);
+      }
     };
   }, []);
 
