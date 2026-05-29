@@ -5,10 +5,12 @@
 import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import { useBoardStore } from '../../stores/boardStore.js';
+import { useAuthStore } from '../../stores/authStore.js';
 import LabelBadge from '../board/LabelBadge.js';
 import MarkdownRenderer from '../card/MarkdownRenderer.js';
 import { MARKDOWN_SYNTAX } from '../card/markdownSyntax.js';
-import { D, MOBILE_FONT_STACK } from './mobileTheme.js';
+import { timeAgo } from '../../utils/timeAgo.js';
+import { D, MOBILE_FONT_STACK, MOBILE_PALETTE } from './mobileTheme.js';
 import { Sheet, SheetHeader, ActionRow, CancelRow, Divider } from './MobileListMenu.js';
 
 interface CardAttachment {
@@ -37,6 +39,22 @@ interface CardDetailData {
   commentCount: number;
   isTemplate: boolean;
   coverAttachmentId: string | null;
+}
+
+interface CommentUser {
+  id: string;
+  username: string;
+  displayName: string;
+  avatarUrl: string | null;
+}
+
+interface Comment {
+  id: string;
+  cardId: string;
+  body: string;
+  editedAt: string | null;
+  createdAt: string;
+  user: CommentUser;
 }
 
 interface MobileCardSheetProps {
@@ -1005,10 +1023,8 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
             )}
           </div>
 
-          {/* Comment count footer */}
-          <div style={{ padding: '14px 18px 32px', color: D.mute, fontSize: 13 }}>
-            {card.commentCount} comment{card.commentCount === 1 ? '' : 's'}
-          </div>
+          {/* Comments */}
+          <MobileComments cardId={cardId} initialCount={card.commentCount} />
         </div>
       )}
 
@@ -1292,6 +1308,313 @@ function Avatar({ member }: { member: { displayName: string; avatarUrl: string |
         />
       ) : (
         member.displayName.charAt(0).toUpperCase()
+      )}
+    </div>
+  );
+}
+
+function CommentAvatar({ user }: { user: CommentUser }) {
+  const name = user.displayName || user.username;
+  let hash = 0;
+  for (let i = 0; i < user.id.length; i++) hash = user.id.charCodeAt(i) + ((hash << 5) - hash);
+  const bg = MOBILE_PALETTE[Math.abs(hash) % MOBILE_PALETTE.length];
+  return (
+    <div
+      style={{
+        width: 30,
+        height: 30,
+        borderRadius: 15,
+        background: user.avatarUrl ? '#3A3A3A' : bg,
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        fontSize: 12,
+        fontWeight: 700,
+        color: '#0A0A0A',
+        overflow: 'hidden',
+        flexShrink: 0,
+      }}
+    >
+      {user.avatarUrl ? (
+        <img src={user.avatarUrl} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+      ) : (
+        name.charAt(0).toUpperCase()
+      )}
+    </div>
+  );
+}
+
+function MobileComments({ cardId, initialCount }: { cardId: string; initialCount: number }) {
+  const [comments, setComments] = useState<Comment[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [newBody, setNewBody] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [editBody, setEditBody] = useState('');
+
+  const currentUser = useAuthStore((s) => s.user);
+
+  useEffect(() => {
+    let cancelled = false;
+    setLoading(true);
+    api
+      .get<{ comments: Comment[] }>(`/cards/${cardId}/comments`)
+      .then((data) => {
+        if (cancelled) return;
+        setComments(data.comments);
+        setLoading(false);
+      })
+      .catch(() => {
+        if (!cancelled) setLoading(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [cardId]);
+
+  async function refresh() {
+    try {
+      const data = await api.get<{ comments: Comment[] }>(`/cards/${cardId}/comments`);
+      setComments(data.comments);
+    } catch {
+      // leave existing list in place on transient failure
+    }
+  }
+
+  async function submit() {
+    const v = newBody.trim();
+    if (!v || submitting) return;
+    setSubmitting(true);
+    try {
+      await api.post(`/cards/${cardId}/comments`, { body: v });
+      setNewBody('');
+      await refresh();
+    } catch {
+      // ignore
+    } finally {
+      setSubmitting(false);
+    }
+  }
+
+  async function saveEdit(id: string) {
+    const v = editBody.trim();
+    if (!v) return;
+    try {
+      await api.patch(`/comments/${id}`, { body: v });
+      setEditingId(null);
+      await refresh();
+    } catch {
+      // ignore
+    }
+  }
+
+  async function remove(id: string) {
+    if (!confirm('Delete this comment?')) return;
+    try {
+      await api.delete(`/comments/${id}`);
+      await refresh();
+    } catch {
+      // ignore
+    }
+  }
+
+  const count = loading ? initialCount : comments.length;
+
+  return (
+    <div style={{ padding: '12px 18px 32px' }}>
+      <div
+        style={{
+          fontSize: 12,
+          color: D.mute,
+          fontWeight: 500,
+          letterSpacing: 0.4,
+          textTransform: 'uppercase',
+          marginBottom: 10,
+        }}
+      >
+        {count} comment{count === 1 ? '' : 's'}
+      </div>
+
+      {/* Composer */}
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 18 }}>
+        <textarea
+          value={newBody}
+          onChange={(e) => setNewBody(e.target.value)}
+          placeholder="Write a comment…"
+          rows={3}
+          style={{
+            width: '100%',
+            background: D.surface,
+            color: D.ink,
+            border: `0.5px solid ${D.hair2}`,
+            borderRadius: 10,
+            padding: 12,
+            fontSize: 15,
+            lineHeight: 1.4,
+            fontFamily: MOBILE_FONT_STACK,
+            outline: 'none',
+            resize: 'vertical',
+          }}
+        />
+        <button
+          onClick={submit}
+          disabled={!newBody.trim() || submitting}
+          style={{
+            alignSelf: 'flex-end',
+            background: !newBody.trim() || submitting ? D.surface2 : D.sky,
+            color: !newBody.trim() || submitting ? D.mute : '#0A0A0A',
+            border: 'none',
+            borderRadius: 10,
+            padding: '8px 18px',
+            fontSize: 14,
+            fontWeight: 600,
+            cursor: !newBody.trim() || submitting ? 'default' : 'pointer',
+            fontFamily: MOBILE_FONT_STACK,
+          }}
+        >
+          {submitting ? 'Posting…' : 'Comment'}
+        </button>
+      </div>
+
+      {/* List */}
+      {loading ? (
+        <div style={{ color: D.mute, fontSize: 14 }}>Loading comments…</div>
+      ) : comments.length === 0 ? (
+        <div style={{ color: D.mute, fontSize: 14 }}>No comments yet.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {comments.map((c) => {
+            const isAuthor = currentUser?.id === c.user.id;
+            const isEditing = editingId === c.id;
+            return (
+              <div key={c.id} style={{ display: 'flex', gap: 10 }}>
+                <CommentAvatar user={c.user} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 4 }}>
+                    <span style={{ fontSize: 14, fontWeight: 600, color: D.ink }}>
+                      {c.user.displayName || c.user.username}
+                    </span>
+                    <span style={{ fontSize: 12, color: D.mute }}>
+                      {timeAgo(c.createdAt)}
+                      {c.editedAt && ' (edited)'}
+                    </span>
+                  </div>
+
+                  {isEditing ? (
+                    <div>
+                      <textarea
+                        value={editBody}
+                        onChange={(e) => setEditBody(e.target.value)}
+                        rows={3}
+                        style={{
+                          width: '100%',
+                          background: D.surface,
+                          color: D.ink,
+                          border: `0.5px solid ${D.hair2}`,
+                          borderRadius: 10,
+                          padding: 10,
+                          fontSize: 15,
+                          lineHeight: 1.4,
+                          fontFamily: MOBILE_FONT_STACK,
+                          outline: 'none',
+                          resize: 'vertical',
+                        }}
+                      />
+                      <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                        <button
+                          onClick={() => saveEdit(c.id)}
+                          disabled={!editBody.trim()}
+                          style={{
+                            background: editBody.trim() ? D.sky : D.surface2,
+                            color: editBody.trim() ? '#0A0A0A' : D.mute,
+                            border: 'none',
+                            borderRadius: 8,
+                            padding: '6px 14px',
+                            fontSize: 13,
+                            fontWeight: 600,
+                            cursor: editBody.trim() ? 'pointer' : 'default',
+                            fontFamily: MOBILE_FONT_STACK,
+                          }}
+                        >
+                          Save
+                        </button>
+                        <button
+                          onClick={() => setEditingId(null)}
+                          style={{
+                            background: D.surface2,
+                            color: D.ink,
+                            border: `0.5px solid ${D.hair2}`,
+                            borderRadius: 8,
+                            padding: '6px 14px',
+                            fontSize: 13,
+                            fontWeight: 500,
+                            cursor: 'pointer',
+                            fontFamily: MOBILE_FONT_STACK,
+                          }}
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <>
+                      <div
+                        style={{
+                          background: D.surface,
+                          border: `0.5px solid ${D.hair2}`,
+                          borderRadius: 10,
+                          padding: '10px 12px',
+                          fontSize: 15,
+                          lineHeight: 1.4,
+                          color: D.ink,
+                        }}
+                      >
+                        <MarkdownRenderer content={c.body} invert />
+                      </div>
+                      {isAuthor && (
+                        <div style={{ display: 'flex', gap: 14, marginTop: 6 }}>
+                          <button
+                            onClick={() => {
+                              setEditingId(c.id);
+                              setEditBody(c.body);
+                            }}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: D.sky,
+                              fontSize: 13,
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              padding: 0,
+                              fontFamily: MOBILE_FONT_STACK,
+                            }}
+                          >
+                            Edit
+                          </button>
+                          <button
+                            onClick={() => remove(c.id)}
+                            style={{
+                              background: 'transparent',
+                              border: 'none',
+                              color: D.danger,
+                              fontSize: 13,
+                              fontWeight: 500,
+                              cursor: 'pointer',
+                              padding: 0,
+                              fontFamily: MOBILE_FONT_STACK,
+                            }}
+                          >
+                            Delete
+                          </button>
+                        </div>
+                      )}
+                    </>
+                  )}
+                </div>
+              </div>
+            );
+          })}
+        </div>
       )}
     </div>
   );
