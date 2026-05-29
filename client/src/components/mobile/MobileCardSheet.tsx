@@ -6,6 +6,11 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../../api/client.js';
 import { useBoardStore } from '../../stores/boardStore.js';
 import { useAuthStore } from '../../stores/authStore.js';
+import {
+  useUnsavedFlag,
+  useUnsavedChangesStore,
+  confirmDiscardIfUnsaved,
+} from '../../stores/unsavedChangesStore.js';
 import LabelBadge from '../board/LabelBadge.js';
 import MarkdownRenderer from '../card/MarkdownRenderer.js';
 import { MARKDOWN_SYNTAX } from '../card/markdownSyntax.js';
@@ -180,6 +185,14 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
 
   const list = card ? lists.find((l) => l.id === card.listId) : undefined;
 
+  // Flag an open, changed description editor as unsaved (warns on close/reload).
+  useUnsavedFlag(`desc:${cardId}`, editingDesc && card != null && descValue !== (card.description ?? ''));
+
+  // Guarded close used by the overlay and the Back button.
+  const requestClose = () => {
+    if (confirmDiscardIfUnsaved()) onClose();
+  };
+
   async function saveTitle() {
     if (!card) return;
     const v = titleValue.trim();
@@ -341,12 +354,13 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
     if (!card) return;
     if (!confirm('Delete this card? This cannot be undone.')) return;
     await deleteCardStore(card.id);
+    useUnsavedChangesStore.getState().clear();
     onClose();
   }
 
   return (
     <div
-      onClick={onClose}
+      onClick={requestClose}
       style={{
         position: 'fixed',
         inset: 0,
@@ -399,7 +413,7 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
         }}
       >
         <button
-          onClick={onClose}
+          onClick={requestClose}
           style={{
             background: 'transparent',
             border: 'none',
@@ -1353,6 +1367,12 @@ function MobileComments({ cardId, initialCount }: { cardId: string; initialCount
   const [editBody, setEditBody] = useState('');
 
   const currentUser = useAuthStore((s) => s.user);
+
+  // Flag a non-empty comment draft (new or in-progress edit) as unsaved.
+  useUnsavedFlag(
+    `comment:${cardId}`,
+    newBody.trim() !== '' || (editingId !== null && editBody.trim() !== ''),
+  );
 
   useEffect(() => {
     let cancelled = false;

@@ -4,6 +4,7 @@ import { useBoardStore } from '../../stores/boardStore.js';
 import LabelBadge from './LabelBadge.js';
 import Modal from '../common/Modal.js';
 import CardDetail from '../card/CardDetail.js';
+import { confirmDiscardIfUnsaved } from '../../stores/unsavedChangesStore.js';
 
 interface CardProps {
   card: {
@@ -189,8 +190,18 @@ export default memo(function Card({ card, listId }: CardProps) {
         </div>
       </div>
 
-      <Modal isOpen={showDetail} onClose={() => setShowDetail(false)}>
-        <CardDetail cardId={card.id} onClose={() => setShowDetail(false)} />
+      <Modal
+        isOpen={showDetail}
+        onClose={() => {
+          if (confirmDiscardIfUnsaved()) setShowDetail(false);
+        }}
+      >
+        <CardDetail
+          cardId={card.id}
+          onClose={() => {
+            if (confirmDiscardIfUnsaved()) setShowDetail(false);
+          }}
+        />
       </Modal>
     </>
   );

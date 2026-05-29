@@ -36,6 +36,7 @@ import KeyboardShortcutsHelp from '../components/common/KeyboardShortcutsHelp.js
 import AvatarUpload from '../components/common/AvatarUpload.js';
 import BackgroundColorPicker from '../components/board/BackgroundColorPicker.js';
 import MobileBoardView from '../components/board/MobileBoardView.js';
+import { confirmDiscardIfUnsaved } from '../stores/unsavedChangesStore.js';
 
 function useIsMobile(query = '(max-width: 767px)') {
   const [matches, setMatches] = useState(() =>
@@ -230,6 +231,7 @@ export default function BoardPage() {
   }, [searchParams, setSearchParams]);
 
   const handleCloseCardDetail = useCallback(() => {
+    if (!confirmDiscardIfUnsaved()) return;
     const newParams = new URLSearchParams(searchParams);
     newParams.delete('card');
     setSearchParams(newParams, { replace: true });

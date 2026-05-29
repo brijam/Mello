@@ -2,6 +2,7 @@ import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { useAuthStore } from './stores/authStore.js';
 import { useSettingsStore, fontSizeMap } from './stores/settingsStore.js';
+import { useUnsavedChangesStore } from './stores/unsavedChangesStore.js';
 import LoginPage from './pages/LoginPage.js';
 import RegisterPage from './pages/RegisterPage.js';
 import HomePage from './pages/HomePage.js';
@@ -33,6 +34,20 @@ export default function App() {
   useEffect(() => {
     document.documentElement.classList.toggle('dark', darkMode);
   }, [darkMode]);
+
+  // Warn on reload / tab close / leaving the app when a card editor has
+  // unsaved changes. (In-app back/forward navigation is not covered — that
+  // would require a React Router data-router migration.)
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (useUnsavedChangesStore.getState().hasUnsaved()) {
+        e.preventDefault();
+        e.returnValue = '';
+      }
+    };
+    window.addEventListener('beforeunload', handler);
+    return () => window.removeEventListener('beforeunload', handler);
+  }, []);
 
   return (
     <Routes>

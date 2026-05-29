@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { api } from '../../api/client.js';
 import { useBoardStore } from '../../stores/boardStore.js';
 import { useAuthStore } from '../../stores/authStore.js';
+import { useUnsavedFlag, useUnsavedChangesStore } from '../../stores/unsavedChangesStore.js';
 import MarkdownRenderer from './MarkdownRenderer.js';
 import MarkdownEditor from './MarkdownEditor.js';
 import LabelPicker from './LabelPicker.js';
@@ -105,6 +106,9 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
   const updateCardChecklistStore = useBoardStore((s) => s.updateCardChecklist);
 
   const listName = card ? lists.find((l) => l.id === card.listId)?.name ?? 'Unknown list' : '';
+
+  // Flag an open, changed description editor as unsaved (warns on close/reload).
+  useUnsavedFlag(`desc:${cardId}`, editingDesc && card != null && descValue !== (card.description ?? ''));
 
   // Sync checklist summary counts to the board store for card preview badges
   const syncChecklistCounts = useCallback((checklists: CardDetailData['checklists']) => {
@@ -211,6 +215,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
     if (!confirm('Delete this card? This cannot be undone.')) return;
     try {
       await deleteCardStore(cardId);
+      useUnsavedChangesStore.getState().clear();
       onClose();
     } catch {
       // ignore

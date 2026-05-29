@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import { api } from '../../api/client.js';
 import { useAuthStore } from '../../stores/authStore.js';
+import { useUnsavedFlag } from '../../stores/unsavedChangesStore.js';
 import MarkdownRenderer from './MarkdownRenderer.js';
 import MarkdownEditor from './MarkdownEditor.js';
 import { timeAgo } from '../../utils/timeAgo.js';
@@ -64,6 +65,12 @@ export default function CardComments({ cardId }: CardCommentsProps) {
   const [editBody, setEditBody] = useState('');
 
   const currentUser = useAuthStore((s) => s.user);
+
+  // Flag a non-empty comment draft (new or in-progress edit) as unsaved.
+  useUnsavedFlag(
+    `comment:${cardId}`,
+    newBody.trim() !== '' || (editingId !== null && editBody.trim() !== ''),
+  );
 
   const fetchComments = async () => {
     try {
