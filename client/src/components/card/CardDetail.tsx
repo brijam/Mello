@@ -611,7 +611,16 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
                 autoFocus
               />
             ) : card.description ? (
-              <div className="min-h-[100px]">
+              <div
+                className="min-h-[100px] rounded p-3 hover:bg-gray-50 cursor-pointer transition-colors"
+                title="Click to edit"
+                onClick={(e) => {
+                  // Let links inside the description open normally.
+                  if ((e.target as HTMLElement).closest('a')) return;
+                  setDescValue(card.description ?? '');
+                  setEditingDesc(true);
+                }}
+              >
                 <MarkdownRenderer content={card.description} />
               </div>
             ) : (
