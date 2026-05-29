@@ -45,12 +45,13 @@ export default function MarkdownRenderer({ content, invert = false }: MarkdownRe
   return (
     <div
       className={`prose prose-sm max-w-none dark:prose-invert ${invert ? 'prose-invert' : ''}
+        break-words [overflow-wrap:anywhere]
         prose-headings:mb-2 prose-headings:mt-4
         prose-p:my-1 prose-ul:my-1 prose-ol:my-1 prose-li:my-0
-        prose-pre:bg-black prose-pre:text-white prose-pre:rounded prose-pre:p-3
+        prose-pre:bg-black prose-pre:text-white prose-pre:rounded prose-pre:p-3 prose-pre:overflow-x-auto
         prose-code:text-sm prose-code:bg-gray-200 prose-code:text-gray-900 prose-code:px-1 prose-code:rounded
         [&_pre_code]:bg-transparent [&_pre_code]:text-inherit [&_pre_code]:p-0
-        prose-a:text-blue-600 prose-a:underline`}
+        prose-a:text-blue-600 prose-a:underline [&_a]:[overflow-wrap:anywhere]`}
       dangerouslySetInnerHTML={{ __html: html }}
     />
   );
