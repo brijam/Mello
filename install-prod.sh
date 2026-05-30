@@ -234,12 +234,26 @@ cat > "$APACHE_CONF" <<EOF
         Options -Indexes +FollowSymLinks
         AllowOverride None
         Require all granted
+
+        # index.html is the unhashed SPA shell — it must always revalidate so a
+        # new deploy is picked up immediately instead of serving a stale bundle
+        # that points at deleted JS.
+        <FilesMatch "^index\.html\$">
+            Header set Cache-Control "no-cache"
+        </FilesMatch>
+
         # SPA fallback
         RewriteEngine On
         RewriteCond %{REQUEST_FILENAME} !-f
         RewriteCond %{REQUEST_FILENAME} !-d
         RewriteCond %{REQUEST_URI} !^/(api|uploads|socket\.io)/
         RewriteRule ^ index.html [L]
+    </Directory>
+
+    # Vite emits content-hashed filenames under assets/, so they're immutable
+    # and safe to cache for a year (a changed file gets a new name).
+    <Directory ${REPO_DIR}/client/dist/assets>
+        Header set Cache-Control "public, max-age=31536000, immutable"
     </Directory>
 
     # WebSocket upgrade for Socket.IO
