@@ -98,6 +98,12 @@ export function useBoardSync(boardId: string | undefined) {
           ...movedCard,
           labelIds: existingCard?.labelIds ?? [],
           memberIds: existingCard?.memberIds ?? [],
+          // Derived badge counts aren't included in the move payload — preserve
+          // them from the card we already have so the checklist/attachment/
+          // comment icons don't disappear after a move.
+          checklistItems: existingCard?.checklistItems ?? movedCard.checklistItems ?? null,
+          attachmentCount: existingCard?.attachmentCount ?? movedCard.attachmentCount ?? 0,
+          commentCount: existingCard?.commentCount ?? movedCard.commentCount ?? 0,
         };
 
         // Check filters before re-adding
