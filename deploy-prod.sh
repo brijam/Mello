@@ -22,7 +22,7 @@ Usage: $0 [--skip-backup] [--skip-install] [--skip-build] [--skip-migrate]
 Steps (each is idempotent — safe to re-run):
   1. ./backup-prod.sh --db-only   (unless --skip-backup)
   2. npm ci                       (unless --skip-install; clean install from committed lockfile)
-  3. npm run build                (unless --skip-build)
+  3. wipe dist + npm run build    (unless --skip-build; clean rebuild, asserts client bundle emitted)
   4. drizzle-kit migrate          (unless --skip-migrate; only applies new migrations)
   5. systemctl restart \$SERVICE_NAME
 
@@ -80,8 +80,25 @@ if [[ "$SKIP_INSTALL" != "1" ]]; then
 fi
 
 if [[ "$SKIP_BUILD" != "1" ]]; then
+  # Wipe previous build output BEFORE building. Apache's DocumentRoot is
+  # client/dist, so without this a failed/partial/skipped client build would
+  # silently keep serving the OLD bundle (vite only re-emits when it actually
+  # runs). Clearing first means a broken build fails loudly instead of shipping
+  # stale JS. Mirrors install-prod.sh.
+  echo "==> Cleaning previous build output (packages/shared, server, client)"
+  rm -rf packages/shared/dist server/dist client/dist
+
   echo "==> npm run build"
   npm run build
+
+  # Assert the client actually re-emitted a bundle. If the client build was
+  # skipped or produced nothing, fail rather than leave an empty DocumentRoot.
+  if ! ls client/dist/assets/*.js >/dev/null 2>&1; then
+    echo "ERROR: build finished but client/dist/assets has no JS — client bundle was not emitted. Aborting." >&2
+    exit 1
+  fi
+  echo "==> Built client bundle (${CUR_SHA:0:10}):"
+  ls -1 client/dist/assets/*.js | sed 's#^.*/#    #'
 fi
 
 if [[ "$SKIP_MIGRATE" != "1" ]]; then
