@@ -88,7 +88,9 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
 
   // Position picker (move card to a specific spot in its list)
   const [showPositionPicker, setShowPositionPicker] = useState(false);
+  const [positionInput, setPositionInput] = useState('');
   const positionPickerRef = useRef<HTMLDivElement>(null);
+  const positionInputRef = useRef<HTMLInputElement>(null);
 
   // Three-dots menu
   const [showCardMenu, setShowCardMenu] = useState(false);
@@ -134,6 +136,16 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
     } catch {
       // Optimistic move self-corrects on the next board fetch / socket sync.
     }
+  };
+
+  // Submit a typed position from the picker's number input.
+  const handlePositionInputSubmit = () => {
+    const parsed = Number.parseInt(positionInput, 10);
+    if (Number.isNaN(parsed)) {
+      setShowPositionPicker(false);
+      return;
+    }
+    handleMoveToPosition(Math.min(Math.max(parsed, 1), cardCount));
   };
 
   // Flag an open, changed description editor as unsaved (warns on close/reload).
@@ -208,9 +220,12 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, [showListPicker]);
 
-  // Click-outside handler for position picker
+  // Click-outside handler for position picker; seed + focus the input when it opens
   useEffect(() => {
     if (!showPositionPicker) return;
+    setPositionInput(currentPosition > 0 ? String(currentPosition) : '');
+    positionInputRef.current?.focus();
+    positionInputRef.current?.select();
     function handleMouseDown(e: MouseEvent) {
       if (positionPickerRef.current && !positionPickerRef.current.contains(e.target as Node)) {
         setShowPositionPicker(false);
@@ -218,7 +233,7 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
     }
     document.addEventListener('mousedown', handleMouseDown);
     return () => document.removeEventListener('mousedown', handleMouseDown);
-  }, [showPositionPicker]);
+  }, [showPositionPicker, currentPosition]);
 
   // -- Handlers --
 
@@ -473,19 +488,31 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
               <span className="font-medium text-gray-700 underline decoration-dotted">{currentPosition}</span>
             </button>
             {showPositionPicker && (
-              <div className="absolute left-0 top-full mt-1 w-[9rem] max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
-                {Array.from({ length: cardCount }, (_, i) => i + 1).map((p) => (
+              <div className="absolute left-0 top-full mt-1 w-[11rem] bg-white border border-gray-200 rounded-lg shadow-lg z-50 p-2">
+                <label className="block text-xs font-medium text-gray-500 mb-1">
+                  Position (1–{cardCount})
+                </label>
+                <div className="flex gap-1.5">
+                  <input
+                    ref={positionInputRef}
+                    type="number"
+                    min={1}
+                    max={cardCount}
+                    value={positionInput}
+                    onChange={(e) => setPositionInput(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handlePositionInputSubmit();
+                      if (e.key === 'Escape') setShowPositionPicker(false);
+                    }}
+                    className="w-16 border border-gray-300 rounded px-2 py-1 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
                   <button
-                    key={p}
-                    onClick={() => handleMoveToPosition(p)}
-                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 ${
-                      p === currentPosition ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
-                    }`}
+                    onClick={handlePositionInputSubmit}
+                    className="flex-1 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded px-2 py-1"
                   >
-                    {p}
-                    {p === currentPosition && ' (current)'}
+                    Move
                   </button>
-                ))}
+                </div>
               </div>
             )}
           </div>
