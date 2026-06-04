@@ -86,6 +86,10 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
   const [showListPicker, setShowListPicker] = useState(false);
   const listPickerRef = useRef<HTMLDivElement>(null);
 
+  // Position picker (move card to a specific spot in its list)
+  const [showPositionPicker, setShowPositionPicker] = useState(false);
+  const positionPickerRef = useRef<HTMLDivElement>(null);
+
   // Three-dots menu
   const [showCardMenu, setShowCardMenu] = useState(false);
   const [showCopyDialog, setShowCopyDialog] = useState(false);
@@ -106,6 +110,31 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
   const updateCardChecklistStore = useBoardStore((s) => s.updateCardChecklist);
 
   const listName = card ? lists.find((l) => l.id === card.listId)?.name ?? 'Unknown list' : '';
+
+  // Cards in the current list, sorted by position, derived from the live board
+  // store (not the fetched card) so the displayed position stays correct after moves.
+  const currentListCards = card
+    ? [...(lists.find((l) => l.id === card.listId)?.cards ?? [])].sort((a, b) => a.position - b.position)
+    : [];
+  const cardCount = currentListCards.length;
+  const currentPosition = card ? currentListCards.findIndex((c) => c.id === card.id) + 1 : 0;
+
+  // Move the card to a specific 1-based position within its current list.
+  const handleMoveToPosition = async (targetPosition: number) => {
+    if (!card) return;
+    setShowPositionPicker(false);
+    if (targetPosition < 1 || targetPosition === currentPosition) return;
+    try {
+      // moveCardLocally removes the card before splicing, so the target index in the
+      // remaining array equals (targetPosition - 1); it returns the fractional position.
+      const position = useBoardStore
+        .getState()
+        .moveCardLocally(card.id, card.listId, card.listId, targetPosition - 1);
+      await api.post(`/cards/${card.id}/move`, { listId: card.listId, position });
+    } catch {
+      // Optimistic move self-corrects on the next board fetch / socket sync.
+    }
+  };
 
   // Flag an open, changed description editor as unsaved (warns on close/reload).
   useUnsavedFlag(`desc:${cardId}`, editingDesc && card != null && descValue !== (card.description ?? ''));
@@ -178,6 +207,18 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
     document.addEventListener('mousedown', handleMouseDown);
     return () => document.removeEventListener('mousedown', handleMouseDown);
   }, [showListPicker]);
+
+  // Click-outside handler for position picker
+  useEffect(() => {
+    if (!showPositionPicker) return;
+    function handleMouseDown(e: MouseEvent) {
+      if (positionPickerRef.current && !positionPickerRef.current.contains(e.target as Node)) {
+        setShowPositionPicker(false);
+      }
+    }
+    document.addEventListener('mousedown', handleMouseDown);
+    return () => document.removeEventListener('mousedown', handleMouseDown);
+  }, [showPositionPicker]);
 
   // -- Handlers --
 
@@ -422,6 +463,33 @@ export default function CardDetail({ cardId, onClose }: CardDetailProps) {
             </div>
           )}
         </div>
+        {cardCount > 0 && (
+          <div className="relative inline-block ml-1" ref={positionPickerRef}>
+            <button
+              onClick={() => setShowPositionPicker((v) => !v)}
+              className="text-sm text-gray-500 mt-1 px-2 hover:bg-gray-100 rounded py-0.5"
+            >
+              at position{' '}
+              <span className="font-medium text-gray-700 underline decoration-dotted">{currentPosition}</span>
+            </button>
+            {showPositionPicker && (
+              <div className="absolute left-0 top-full mt-1 w-[9rem] max-h-64 overflow-y-auto bg-white border border-gray-200 rounded-lg shadow-lg z-50 py-1">
+                {Array.from({ length: cardCount }, (_, i) => i + 1).map((p) => (
+                  <button
+                    key={p}
+                    onClick={() => handleMoveToPosition(p)}
+                    className={`w-full text-left px-3 py-1.5 text-sm hover:bg-gray-100 ${
+                      p === currentPosition ? 'bg-blue-50 text-blue-700 font-medium' : 'text-gray-700'
+                    }`}
+                  >
+                    {p}
+                    {p === currentPosition && ' (current)'}
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
         {card.labels.length > 0 && (
           <div className="flex flex-wrap gap-1.5 mt-2 px-2 -mx-2">
             {card.labels.map((label) => (
