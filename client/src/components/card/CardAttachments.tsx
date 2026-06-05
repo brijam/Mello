@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from 'react';
 import ImageLightbox from '../common/ImageLightbox.js';
+import { uploadAttachment } from '../../api/attachments.js';
 
 interface Attachment {
   id: string;
@@ -44,20 +45,7 @@ export default function CardAttachments({ cardId, attachments, onRefresh, curren
     setUploading(true);
     setError(null);
     try {
-      const formData = new FormData();
-      formData.append('file', file);
-
-      const res = await fetch(`/api/v1/cards/${cardId}/attachments`, {
-        method: 'POST',
-        credentials: 'include',
-        body: formData,
-      });
-
-      if (!res.ok) {
-        const data = await res.json().catch(() => ({}));
-        throw new Error(data.error?.message || 'Upload failed');
-      }
-
+      await uploadAttachment(cardId, file);
       onRefresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Upload failed');
