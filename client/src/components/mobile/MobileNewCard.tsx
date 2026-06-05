@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { useBoardStore } from '../../stores/boardStore.js';
 import { api } from '../../api/client.js';
+import { uploadAttachment } from '../../api/attachments.js';
 import LabelBadge from '../board/LabelBadge.js';
 import { D, MOBILE_FONT_STACK } from './mobileTheme.js';
 
@@ -23,10 +24,13 @@ export default function MobileNewCard({ listId, listName, onClose }: MobileNewCa
   const [description, setDescription] = useState('');
   const [labelIds, setLabelIds] = useState<string[]>([]);
   const [memberIds, setMemberIds] = useState<string[]>([]);
+  const [files, setFiles] = useState<File[]>([]);
   const [activeListId, setActiveListId] = useState(listId);
   const [section, setSection] = useState<'main' | 'labels' | 'members' | 'list'>('main');
   const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
   const titleRef = useRef<HTMLTextAreaElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
     titleRef.current?.focus();
@@ -37,6 +41,7 @@ export default function MobileNewCard({ listId, listName, onClose }: MobileNewCa
   async function handleCreate() {
     if (!title.trim() || saving) return;
     setSaving(true);
+    setError(null);
     try {
       // Create with title; labels/members/description are applied via follow-up
       // requests because the create endpoint only accepts name+position. addCard
@@ -63,10 +68,46 @@ export default function MobileNewCard({ listId, listName, onClose }: MobileNewCa
         );
       }
       await Promise.all(apiPromises);
+
+      // Attachments use multipart uploads scoped to the now-created card. Settle
+      // each independently so one failure doesn't drop the others, then bump the
+      // board badge by however many landed.
+      if (files.length > 0) {
+        const results = await Promise.allSettled(
+          files.map((file) => uploadAttachment(newCard.id, file)),
+        );
+        const uploaded = results.filter((r) => r.status === 'fulfilled').length;
+        useBoardStore.getState().incrementCardAttachmentCount(newCard.id, uploaded);
+
+        const failed = results.length - uploaded;
+        if (failed > 0) {
+          // The card exists; keep the sheet open so the user knows some files
+          // didn't upload (re-tapping Add would create a different card).
+          setFiles([]);
+          setError(
+            `Card created, but ${failed} attachment${failed > 1 ? 's' : ''} failed to upload. ` +
+              `Open the card to add ${failed > 1 ? 'them' : 'it'} again.`,
+          );
+          return;
+        }
+      }
+
       onClose();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Failed to add card');
     } finally {
       setSaving(false);
     }
+  }
+
+  function addFiles(selected: FileList | null) {
+    if (selected && selected.length > 0) {
+      setFiles((prev) => [...prev, ...Array.from(selected)]);
+    }
+  }
+
+  function removeFile(index: number) {
+    setFiles((prev) => prev.filter((_, i) => i !== index));
   }
 
   const canSave = title.trim().length > 0 && !saving;
@@ -303,6 +344,105 @@ export default function MobileNewCard({ listId, listName, onClose }: MobileNewCa
               <Chevron />
             </span>
           </button>
+
+          {/* Attachments — tapping opens the native picker (camera / photos / files). */}
+          <button
+            onClick={() => fileInputRef.current?.click()}
+            style={{
+              background: D.surface,
+              border: `0.5px solid ${D.hair2}`,
+              borderRadius: 12,
+              padding: '12px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'space-between',
+              color: D.ink,
+              fontSize: 14,
+              cursor: 'pointer',
+              fontFamily: MOBILE_FONT_STACK,
+            }}
+          >
+            <span style={{ color: D.mute, fontWeight: 500 }}>Attachments</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
+              {files.length > 0 && <span>{files.length} selected</span>}
+              <span style={{ color: D.sky, fontWeight: 600 }}>+ Add</span>
+            </span>
+          </button>
+
+          <input
+            ref={fileInputRef}
+            type="file"
+            multiple
+            style={{ display: 'none' }}
+            onChange={(e) => {
+              addFiles(e.target.files);
+              // Reset so the same file can be picked again after removal.
+              e.target.value = '';
+            }}
+          />
+
+          {files.length > 0 && (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+              {files.map((file, i) => (
+                <div
+                  key={`${file.name}-${i}`}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 10,
+                    background: D.surface,
+                    border: `0.5px solid ${D.hair2}`,
+                    borderRadius: 10,
+                    padding: '10px 12px',
+                  }}
+                >
+                  <span
+                    style={{
+                      flex: 1,
+                      fontSize: 14,
+                      color: D.ink,
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {file.name}
+                  </span>
+                  <button
+                    onClick={() => removeFile(i)}
+                    aria-label={`Remove ${file.name}`}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      color: D.mute,
+                      fontSize: 20,
+                      lineHeight: 1,
+                      padding: '0 4px',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {error && (
+            <div
+              style={{
+                background: 'rgba(220,38,38,0.12)',
+                border: '0.5px solid rgba(220,38,38,0.4)',
+                color: '#f87171',
+                borderRadius: 10,
+                padding: '10px 12px',
+                fontSize: 13,
+                lineHeight: 1.4,
+              }}
+            >
+              {error}
+            </div>
+          )}
         </div>
       )}
 
