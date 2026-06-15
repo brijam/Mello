@@ -8,6 +8,7 @@ import { users } from '../db/schema/users.js';
 import { requireAuth, requireWorkspaceRole } from '../middleware/auth.js';
 import { validateBody } from '../middleware/validate.js';
 import { NotFoundError } from '../utils/errors.js';
+import { withUserBoardBackgrounds } from '../utils/userColors.js';
 
 export async function workspaceRoutes(app: FastifyInstance) {
   // List workspaces for current user
@@ -124,6 +125,10 @@ export async function workspaceRoutes(app: FastifyInstance) {
       .where(eq(boards.workspaceId, workspaceId))
       .orderBy(boards.position);
 
-    return { boards: rows };
+    // Apply each user's personal background so the board tiles match what they
+    // see inside the board.
+    const boardsWithBg = await withUserBoardBackgrounds(rows, request.userId!);
+
+    return { boards: boardsWithBg };
   });
 }

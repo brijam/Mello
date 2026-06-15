@@ -1,7 +1,9 @@
 export { users } from './users.js';
 export { workspaces, workspaceMembers } from './workspaces.js';
 export { boards, boardMembers } from './boards.js';
+export { boardBackgrounds } from './board-backgrounds.js';
 export { lists } from './lists.js';
+export { listColors } from './list-colors.js';
 export { cards } from './cards.js';
 export { labels, cardLabels } from './labels.js';
 export { cardAssignments } from './card-assignments.js';

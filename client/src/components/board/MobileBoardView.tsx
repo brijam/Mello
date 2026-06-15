@@ -33,6 +33,7 @@ import MobileListMenu, {
 import MobileNotificationsSheet from '../mobile/MobileNotificationsSheet.js';
 import MobileSearchSheet from '../mobile/MobileSearchSheet.js';
 import MobileNewCard from '../mobile/MobileNewCard.js';
+import MobileBoardBackground from '../mobile/MobileBoardBackground.js';
 import MobileCardSheet from '../mobile/MobileCardSheet.js';
 import {
   D,
@@ -113,6 +114,7 @@ export default function MobileBoardView({
   const [showSearch, setShowSearch] = useState(false);
   const [showNewCard, setShowNewCard] = useState(false);
   const [showListMenu, setShowListMenu] = useState(false);
+  const [showBoardBg, setShowBoardBg] = useState(false);
   const [showAddList, setShowAddList] = useState(false);
   const [newListName, setNewListName] = useState('');
   const [addingList, setAddingList] = useState(false);
@@ -296,8 +298,15 @@ export default function MobileBoardView({
           </svg>
         </button>
         <div className="flex-1 text-center" style={{ minWidth: 0 }}>
-          <div
+          <button
+            onClick={() => board && setShowBoardBg(true)}
+            aria-label="Change board background"
             style={{
+              background: 'transparent',
+              border: 'none',
+              padding: 0,
+              color: D.ink,
+              cursor: board ? 'pointer' : 'default',
               fontSize: 15,
               fontWeight: 600,
               letterSpacing: -0.2,
@@ -305,6 +314,7 @@ export default function MobileBoardView({
               alignItems: 'center',
               gap: 7,
               maxWidth: '100%',
+              fontFamily: 'inherit',
             }}
           >
             <span
@@ -325,7 +335,7 @@ export default function MobileBoardView({
             >
               {boardName}
             </span>
-          </div>
+          </button>
         </div>
         <button
           onClick={() => activeList && setShowListMenu(true)}
@@ -595,6 +605,12 @@ export default function MobileBoardView({
         <MobileListMenu
           list={{ id: activeList.id, name: activeList.name, color: activeList.color ?? null }}
           onClose={() => setShowListMenu(false)}
+        />
+      )}
+      {showBoardBg && board && (
+        <MobileBoardBackground
+          board={{ id: board.id, backgroundType: board.backgroundType, backgroundValue: board.backgroundValue }}
+          onClose={() => setShowBoardBg(false)}
         />
       )}
       {showAddList && (

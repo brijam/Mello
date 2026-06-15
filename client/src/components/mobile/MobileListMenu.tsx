@@ -345,7 +345,7 @@ export function CancelRow({ onClick, label = 'Cancel' }: { onClick: () => void; 
   );
 }
 
-function PrimaryButton({ children, onClick }: { children: React.ReactNode; onClick: () => void | Promise<void> }) {
+export function PrimaryButton({ children, onClick }: { children: React.ReactNode; onClick: () => void | Promise<void> }) {
   return (
     <button
       onClick={onClick}
@@ -367,7 +367,7 @@ function PrimaryButton({ children, onClick }: { children: React.ReactNode; onCli
   );
 }
 
-function SecondaryButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+export function SecondaryButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
   return (
     <button
       onClick={onClick}
@@ -390,7 +390,7 @@ function SecondaryButton({ children, onClick }: { children: React.ReactNode; onC
 }
 
 /** Opens the native color picker; shows a rainbow until a custom color is set. */
-function CustomColorSwatch({
+export function CustomColorSwatch({
   current,
   active,
   onPick,
@@ -432,7 +432,7 @@ function CustomColorSwatch({
   );
 }
 
-function ColorSwatch({
+export function ColorSwatch({
   color,
   active,
   onClick,

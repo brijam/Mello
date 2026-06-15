@@ -3,6 +3,7 @@ import { eq, and, asc } from 'drizzle-orm';
 import { createBoardSchema, updateBoardSchema, createFromTemplateSchema } from '@mello/shared';
 import { db } from '../db/index.js';
 import { boards, boardMembers } from '../db/schema/boards.js';
+import { boardBackgrounds } from '../db/schema/board-backgrounds.js';
 import { workspaceMembers } from '../db/schema/workspaces.js';
 import { labels } from '../db/schema/labels.js';
 import { lists } from '../db/schema/lists.js';
@@ -16,6 +17,10 @@ import { LABEL_COLORS, WS_EVENTS } from '@mello/shared';
 import { broadcast } from '../utils/broadcast.js';
 import { createNotification } from '../utils/notifications.js';
 import { config } from '../config.js';
+import {
+  withUserBoardBackground,
+  withUserListColors,
+} from '../utils/userColors.js';
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
 
@@ -159,12 +164,17 @@ export async function boardRoutes(app: FastifyInstance) {
   }, async (request) => {
     const { boardId } = request.params as { boardId: string };
 
-    const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
-    if (!board) throw new NotFoundError('Board');
+    const [boardRow] = await db.select().from(boards).where(eq(boards.id, boardId));
+    if (!boardRow) throw new NotFoundError('Board');
+
+    // Resolve the background to this user's personal preference (falls back to
+    // the board default when they haven't set one).
+    const board = await withUserBoardBackground(boardRow, request.userId!);
 
     const boardLabels = await db.select().from(labels).where(eq(labels.boardId, boardId)).orderBy(labels.position);
 
-    const boardLists = await db.select().from(lists).where(eq(lists.boardId, boardId)).orderBy(asc(lists.position));
+    const listRows = await db.select().from(lists).where(eq(lists.boardId, boardId)).orderBy(asc(lists.position));
+    const boardLists = await withUserListColors(listRows, request.userId!);
 
     const boardCards = await db.select().from(cards).where(eq(cards.boardId, boardId)).orderBy(asc(cards.position));
 
@@ -304,7 +314,76 @@ export async function boardRoutes(app: FastifyInstance) {
     return reply.status(204).send();
   });
 
-  // Upload board background image
+  // Set the current user's board background to a solid color. This is a
+  // personal preference (board_backgrounds), not the shared board default, so
+  // every member can color the same board differently. No broadcast — it only
+  // affects the requesting user.
+  app.put('/boards/:boardId/background', {
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
+    const { boardId } = request.params as { boardId: string };
+    const { backgroundValue } = request.body as { backgroundValue?: string };
+
+    if (!backgroundValue || typeof backgroundValue !== 'string') {
+      throw new ValidationError('backgroundValue is required');
+    }
+
+    const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
+    if (!board) throw new NotFoundError('Board');
+
+    const [member] = await db.select().from(boardMembers).where(
+      and(eq(boardMembers.boardId, boardId), eq(boardMembers.userId, request.userId!)),
+    );
+    if (!member) throw new ForbiddenError();
+
+    await db.insert(boardBackgrounds).values({
+      boardId,
+      userId: request.userId!,
+      backgroundType: 'color',
+      backgroundValue,
+    }).onConflictDoUpdate({
+      target: [boardBackgrounds.boardId, boardBackgrounds.userId],
+      set: { backgroundType: 'color', backgroundValue, updatedAt: new Date() },
+    });
+
+    return reply.status(200).send({ board: { ...board, backgroundType: 'color', backgroundValue } });
+  });
+
+  // Reset the current user's board background to the board default.
+  app.delete('/boards/:boardId/background', {
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
+    const { boardId } = request.params as { boardId: string };
+
+    const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
+    if (!board) throw new NotFoundError('Board');
+
+    const [member] = await db.select().from(boardMembers).where(
+      and(eq(boardMembers.boardId, boardId), eq(boardMembers.userId, request.userId!)),
+    );
+    if (!member) throw new ForbiddenError();
+
+    await db.delete(boardBackgrounds).where(
+      and(eq(boardBackgrounds.boardId, boardId), eq(boardBackgrounds.userId, request.userId!)),
+    );
+
+    // Remove any stored image files for this user/board.
+    const dir = path.join(config.STORAGE_PATH, 'backgrounds');
+    try {
+      const existingFiles = await fs.readdir(dir);
+      for (const f of existingFiles) {
+        if (f.startsWith(`${boardId}-${request.userId!}-`)) {
+          await fs.unlink(path.join(dir, f)).catch(() => {});
+        }
+      }
+    } catch {
+      // Directory may not exist yet
+    }
+
+    return reply.status(200).send({ board });
+  });
+
+  // Upload the current user's board background image (personal preference).
   app.post('/boards/:boardId/background', {
     preHandler: [requireAuth],
   }, async (request, reply) => {
@@ -313,11 +392,11 @@ export async function boardRoutes(app: FastifyInstance) {
     const [board] = await db.select().from(boards).where(eq(boards.id, boardId));
     if (!board) throw new NotFoundError('Board');
 
-    // Check board membership - must be admin
+    // Any board member can set their own background.
     const [member] = await db.select().from(boardMembers).where(
       and(eq(boardMembers.boardId, boardId), eq(boardMembers.userId, request.userId!)),
     );
-    if (!member || member.role !== 'admin') throw new ForbiddenError();
+    if (!member) throw new ForbiddenError();
 
     const file = await request.file();
     if (!file) {
@@ -333,11 +412,12 @@ export async function boardRoutes(app: FastifyInstance) {
     const dir = path.join(config.STORAGE_PATH, 'backgrounds');
     await fs.mkdir(dir, { recursive: true });
 
-    // Remove old background files for this board
+    // Remove this user's previous background files for this board (not other users').
+    const prefix = `${boardId}-${request.userId!}-`;
     try {
       const existingFiles = await fs.readdir(dir);
       for (const f of existingFiles) {
-        if (f.startsWith(`${boardId}-`)) {
+        if (f.startsWith(prefix)) {
           await fs.unlink(path.join(dir, f)).catch(() => {});
         }
       }
@@ -345,7 +425,7 @@ export async function boardRoutes(app: FastifyInstance) {
       // Directory may not exist yet
     }
 
-    const storageName = `${boardId}-${sanitized}`;
+    const storageName = `${prefix}${sanitized}`;
     const storagePath = path.join(dir, storageName);
 
     const buffer = await file.toBuffer();
@@ -356,13 +436,17 @@ export async function boardRoutes(app: FastifyInstance) {
 
     const backgroundValue = `/api/v1/boards/${boardId}/background/image`;
 
-    const [updatedBoard] = await db
-      .update(boards)
-      .set({ backgroundType: 'image' as const, backgroundValue, updatedAt: new Date() })
-      .where(eq(boards.id, boardId))
-      .returning();
+    await db.insert(boardBackgrounds).values({
+      boardId,
+      userId: request.userId!,
+      backgroundType: 'image',
+      backgroundValue,
+    }).onConflictDoUpdate({
+      target: [boardBackgrounds.boardId, boardBackgrounds.userId],
+      set: { backgroundType: 'image', backgroundValue, updatedAt: new Date() },
+    });
 
-    return reply.status(200).send({ board: updatedBoard });
+    return reply.status(200).send({ board: { ...board, backgroundType: 'image' as const, backgroundValue } });
   });
 
   // Serve board background image
@@ -381,7 +465,12 @@ export async function boardRoutes(app: FastifyInstance) {
       throw new NotFoundError('Background image');
     }
 
-    const bgFile = files.find((f) => f.startsWith(`${boardId}-`) && !f.endsWith('.meta'));
+    // Prefer the current user's image; fall back to a legacy board-wide file
+    // (uploaded before backgrounds became per-user).
+    const userPrefix = `${boardId}-${request.userId!}-`;
+    const bgFile =
+      files.find((f) => f.startsWith(userPrefix) && !f.endsWith('.meta')) ??
+      files.find((f) => f.startsWith(`${boardId}-`) && !f.endsWith('.meta'));
     if (!bgFile) {
       throw new NotFoundError('Background image');
     }

@@ -56,6 +56,8 @@ interface BoardState {
   updateCardChecklist: (cardId: string, checklistItems: { total: number; checked: number } | null) => void;
   incrementCardAttachmentCount: (cardId: string, by: number) => void;
   updateBoard: (boardId: string, data: { name?: string; backgroundType?: string; backgroundValue?: string; accentColor?: string | null }) => Promise<void>;
+  setBoardBackgroundImage: (boardId: string, file: File) => Promise<void>;
+  resetBoardBackground: (boardId: string) => Promise<void>;
   deleteCard: (cardId: string) => Promise<void>;
   moveCardLocally: (cardId: string, fromListId: string, toListId: string, newIndex: number) => number;
   moveListLocally: (listId: string, newIndex: number) => number;
@@ -153,10 +155,26 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   updateList: async (listId, body) => {
-    const data = await api.patch<{ list: ListWithCards }>(`/lists/${listId}`, body);
+    const { color, ...rest } = body;
+    const patch: Partial<ListWithCards> = {};
+
+    // color is a per-user preference with its own endpoint (no broadcast).
+    if (color !== undefined) {
+      const data = await api.put<{ list: ListWithCards }>(`/lists/${listId}/color`, { color });
+      patch.color = data.list.color;
+    }
+
+    // name/position are shared; the PATCH response carries the shared default
+    // color, so drop it to avoid clobbering this user's personal color.
+    if (Object.keys(rest).length > 0) {
+      const data = await api.patch<{ list: ListWithCards }>(`/lists/${listId}`, rest);
+      const { color: _ignored, cards: _cards, ...listRest } = data.list;
+      Object.assign(patch, listRest);
+    }
+
     set((state) => ({
       lists: state.lists.map((list) =>
-        list.id === listId ? { ...list, ...data.list } : list,
+        list.id === listId ? { ...list, ...patch } : list,
       ),
     }));
   },
@@ -303,7 +321,46 @@ export const useBoardStore = create<BoardState>((set, get) => ({
   },
 
   updateBoard: async (boardId, data) => {
-    const result = await api.patch<{ board: Board }>(`/boards/${boardId}`, data);
+    const { backgroundType, backgroundValue, ...rest } = data;
+    let nextBoard: Board | undefined;
+
+    // Background color is a personal preference (per-user, no broadcast). Image
+    // backgrounds go through setBoardBackgroundImage (multipart upload).
+    if (backgroundType === 'color' && backgroundValue !== undefined) {
+      const result = await api.put<{ board: Board }>(`/boards/${boardId}/background`, { backgroundValue });
+      nextBoard = result.board;
+    }
+
+    // name/description/etc. are shared board fields.
+    if (Object.keys(rest).length > 0) {
+      const result = await api.patch<{ board: Board }>(`/boards/${boardId}`, rest);
+      nextBoard = nextBoard
+        ? { ...result.board, backgroundType: nextBoard.backgroundType, backgroundValue: nextBoard.backgroundValue }
+        : result.board;
+    }
+
+    if (nextBoard) set({ board: nextBoard });
+  },
+
+  setBoardBackgroundImage: async (boardId, file) => {
+    const form = new FormData();
+    form.append('file', file);
+    const res = await fetch(`/api/v1/boards/${boardId}/background`, {
+      method: 'POST',
+      credentials: 'include',
+      body: form,
+    });
+    if (!res.ok) {
+      const data = await res.json().catch(() => null);
+      throw new Error(data?.error?.message ?? 'Failed to upload background image');
+    }
+    const { board } = (await res.json()) as { board: Board };
+    // Cache-bust the image URL so the browser re-fetches after a replacement.
+    set({ board: { ...board, backgroundValue: `${board.backgroundValue}?t=${Date.now()}` } });
+  },
+
+  resetBoardBackground: async (boardId) => {
+    const result = await api.delete<{ board: Board }>(`/boards/${boardId}/background`);
     set({ board: result.board });
   },
 

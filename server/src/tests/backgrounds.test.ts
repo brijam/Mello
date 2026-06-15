@@ -151,7 +151,7 @@ describe('POST /api/v1/boards/:boardId/background', () => {
     expect(res.statusCode).toBe(401);
   });
 
-  it('only board admin can upload (normal member gets 403)', async () => {
+  it('any board member can set their own background (normal member gets 200)', async () => {
     const owner = await setupBoard(app);
     const member = await createTestUser(app);
 
@@ -164,14 +164,14 @@ describe('POST /api/v1/boards/:boardId/background', () => {
 
     const res = await uploadBackground(app, member.cookies, owner.board.id);
 
-    expect(res.statusCode).toBe(403);
+    expect(res.statusCode).toBe(200);
+    expect(res.json().board.backgroundType).toBe('image');
   });
 
-  it('only board admin can upload (observer gets 403)', async () => {
+  it('an observer can set their own background (200)', async () => {
     const owner = await setupBoard(app);
     const observer = await createTestUser(app);
 
-    // Add observer
     await injectWithAuth(app, owner.cookies, {
       method: 'POST',
       url: `/api/v1/boards/${owner.board.id}/members`,
@@ -179,6 +179,15 @@ describe('POST /api/v1/boards/:boardId/background', () => {
     });
 
     const res = await uploadBackground(app, observer.cookies, owner.board.id);
+
+    expect(res.statusCode).toBe(200);
+  });
+
+  it('a non-member cannot set a background (403)', async () => {
+    const owner = await setupBoard(app);
+    const outsider = await createTestUser(app);
+
+    const res = await uploadBackground(app, outsider.cookies, owner.board.id);
 
     expect(res.statusCode).toBe(403);
   });
@@ -342,21 +351,40 @@ describe('GET /api/v1/boards/:boardId/background/image', () => {
   });
 });
 
-// ── Color Backgrounds ───────────────────────────────────────────────────────
+// ── Color Backgrounds (per-user) ─────────────────────────────────────────────
 
-describe('Color backgrounds via PATCH /api/v1/boards/:boardId', () => {
-  it('sets backgroundType to color with a hex value', async () => {
+describe('Color backgrounds via PUT /api/v1/boards/:boardId/background', () => {
+  it('sets the user background to a color with a hex value', async () => {
     const { cookies, board } = await setupBoard(app);
 
     const res = await injectWithAuth(app, cookies, {
-      method: 'PATCH',
-      url: `/api/v1/boards/${board.id}`,
-      payload: { backgroundType: 'color', backgroundValue: '#ff5733' },
+      method: 'PUT',
+      url: `/api/v1/boards/${board.id}/background`,
+      payload: { backgroundValue: '#ff5733' },
     });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().board.backgroundType).toBe('color');
     expect(res.json().board.backgroundValue).toBe('#ff5733');
+  });
+
+  it('the chosen color is reflected when the board is fetched', async () => {
+    const { cookies, board } = await setupBoard(app);
+
+    await injectWithAuth(app, cookies, {
+      method: 'PUT',
+      url: `/api/v1/boards/${board.id}/background`,
+      payload: { backgroundValue: '#abcdef' },
+    });
+
+    const res = await injectWithAuth(app, cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${board.id}`,
+    });
+
+    expect(res.statusCode).toBe(200);
+    expect(res.json().board.backgroundType).toBe('color');
+    expect(res.json().board.backgroundValue).toBe('#abcdef');
   });
 
   it('can switch from image back to color background', async () => {
@@ -369,13 +397,97 @@ describe('Color backgrounds via PATCH /api/v1/boards/:boardId', () => {
 
     // Switch to color
     const res = await injectWithAuth(app, cookies, {
-      method: 'PATCH',
-      url: `/api/v1/boards/${board.id}`,
-      payload: { backgroundType: 'color', backgroundValue: '#0079bf' },
+      method: 'PUT',
+      url: `/api/v1/boards/${board.id}/background`,
+      payload: { backgroundValue: '#0079bf' },
     });
 
     expect(res.statusCode).toBe(200);
     expect(res.json().board.backgroundType).toBe('color');
     expect(res.json().board.backgroundValue).toBe('#0079bf');
+
+    // ...and the board now reads back as a color for this user.
+    const fetched = await injectWithAuth(app, cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${board.id}`,
+    });
+    expect(fetched.json().board.backgroundType).toBe('color');
+  });
+
+  it('resetting reverts to the board default', async () => {
+    const { cookies, board } = await setupBoard(app);
+
+    await injectWithAuth(app, cookies, {
+      method: 'PUT',
+      url: `/api/v1/boards/${board.id}/background`,
+      payload: { backgroundValue: '#123456' },
+    });
+
+    const res = await injectWithAuth(app, cookies, {
+      method: 'DELETE',
+      url: `/api/v1/boards/${board.id}/background`,
+    });
+    expect(res.statusCode).toBe(200);
+
+    const fetched = await injectWithAuth(app, cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${board.id}`,
+    });
+    // Default created by POST /boards is the standard Trello blue.
+    expect(fetched.json().board.backgroundValue).toBe('#0079bf');
+  });
+});
+
+// ── Per-user isolation ───────────────────────────────────────────────────────
+
+describe('Backgrounds are per-user', () => {
+  async function addMember(owner: Awaited<ReturnType<typeof setupBoard>>, member: { user: { id: string } }) {
+    await injectWithAuth(app, owner.cookies, {
+      method: 'POST',
+      url: `/api/v1/boards/${owner.board.id}/members`,
+      payload: { userId: member.user.id, role: 'normal' },
+    });
+  }
+
+  it("one user's color does not change another user's view", async () => {
+    const owner = await setupBoard(app);
+    const member = await createTestUser(app);
+    await addMember(owner, member);
+
+    // Owner picks magenta.
+    await injectWithAuth(app, owner.cookies, {
+      method: 'PUT',
+      url: `/api/v1/boards/${owner.board.id}/background`,
+      payload: { backgroundValue: '#ff00ff' },
+    });
+
+    const ownerView = await injectWithAuth(app, owner.cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${owner.board.id}`,
+    });
+    const memberView = await injectWithAuth(app, member.cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${owner.board.id}`,
+    });
+
+    expect(ownerView.json().board.backgroundValue).toBe('#ff00ff');
+    // Member still sees the board default, not the owner's personal color.
+    expect(memberView.json().board.backgroundValue).toBe('#0079bf');
+  });
+
+  it("one user's image does not change another user's view", async () => {
+    const owner = await setupBoard(app);
+    const member = await createTestUser(app);
+    await addMember(owner, member);
+
+    await uploadBackground(app, owner.cookies, owner.board.id);
+
+    const memberView = await injectWithAuth(app, member.cookies, {
+      method: 'GET',
+      url: `/api/v1/boards/${owner.board.id}`,
+    });
+
+    expect(memberView.json().board.backgroundType).toBe('color');
+    expect(memberView.json().board.backgroundValue).toBe('#0079bf');
   });
 });

@@ -70,6 +70,8 @@ export default function BoardPage() {
   const moveListLocally = useBoardStore((s) => s.moveListLocally);
   const updateList = useBoardStore((s) => s.updateList);
   const updateBoard = useBoardStore((s) => s.updateBoard);
+  const setBoardBackgroundImage = useBoardStore((s) => s.setBoardBackgroundImage);
+  const resetBoardBackground = useBoardStore((s) => s.resetBoardBackground);
   const { user, logout } = useAuthStore();
   useBoardSync(boardId);
   const isMobile = useIsMobile();
@@ -522,7 +524,10 @@ export default function BoardPage() {
         <div className="flex items-center gap-3 flex-shrink-0">
           <BackgroundColorPicker
             currentColor={board.backgroundValue}
+            currentType={board.backgroundType}
             onColorChange={(color) => updateBoard(board.id, { backgroundType: 'color', backgroundValue: color })}
+            onImageUpload={(file) => setBoardBackgroundImage(board.id, file)}
+            onReset={() => resetBoardBackground(board.id)}
           />
           <SearchBar boardId={board.id} boardName={board.name} />
           {/* Filter button */}

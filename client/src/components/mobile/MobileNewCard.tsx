@@ -141,16 +141,6 @@ export default function MobileNewCard({ listId, listName, onClose }: MobileNewCa
         fontFamily: MOBILE_FONT_STACK,
       }}
     >
-      <div
-        style={{
-          width: 36,
-          height: 4,
-          background: D.hair3,
-          borderRadius: 2,
-          margin: '8px auto 4px',
-          flexShrink: 0,
-        }}
-      />
       {/* Header */}
       <header
         style={{

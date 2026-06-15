@@ -15,6 +15,8 @@ import { validateBody } from '../middleware/validate.js';
 import { NotFoundError, ForbiddenError, ValidationError } from '../utils/errors.js';
 import { getNextPosition } from '../utils/position.js';
 import { broadcast } from '../utils/broadcast.js';
+import { withUserListColors } from '../utils/userColors.js';
+import { listColors } from '../db/schema/list-colors.js';
 import { WS_EVENTS } from '@mello/shared';
 
 export async function listRoutes(app: FastifyInstance) {
@@ -52,11 +54,13 @@ export async function listRoutes(app: FastifyInstance) {
       memberFilter = [...new Set(raw)];
     }
 
-    const boardLists = await db
+    const listRows = await db
       .select()
       .from(lists)
       .where(eq(lists.boardId, boardId))
       .orderBy(asc(lists.position));
+    // Override each list's color with this user's personal preference, if set.
+    const boardLists = await withUserListColors(listRows, request.userId!);
 
     let boardCards = await db
       .select()
@@ -254,8 +258,47 @@ export async function listRoutes(app: FastifyInstance) {
       .returning();
 
     if (!list) throw new NotFoundError('List');
-    broadcast(app.io, list.boardId, WS_EVENTS.LIST_UPDATED, { list });
+    // color is a per-user preference (see PUT /lists/:listId/color); don't push
+    // one user's default color to everyone via the shared list broadcast.
+    const { color: _color, ...listForBroadcast } = list;
+    broadcast(app.io, list.boardId, WS_EVENTS.LIST_UPDATED, { list: listForBroadcast });
     return { list };
+  });
+
+  // Set the current user's personal color for a list. Personal preference
+  // (list_colors), not the shared default — no broadcast to other members.
+  app.put('/lists/:listId/color', {
+    preHandler: [requireAuth],
+  }, async (request, reply) => {
+    const { listId } = request.params as { listId: string };
+    const { color } = request.body as { color?: string | null };
+
+    const [list] = await db.select().from(lists).where(eq(lists.id, listId));
+    if (!list) throw new NotFoundError('List');
+
+    const [member] = await db.select().from(boardMembers).where(
+      and(eq(boardMembers.boardId, list.boardId), eq(boardMembers.userId, request.userId!)),
+    );
+    if (!member) throw new ForbiddenError();
+
+    if (color === null || color === undefined || color === '') {
+      // Clear the override → fall back to the list's default color.
+      await db.delete(listColors).where(
+        and(eq(listColors.listId, listId), eq(listColors.userId, request.userId!)),
+      );
+      return reply.send({ list });
+    }
+
+    await db.insert(listColors).values({
+      listId,
+      userId: request.userId!,
+      color,
+    }).onConflictDoUpdate({
+      target: [listColors.listId, listColors.userId],
+      set: { color, updatedAt: new Date() },
+    });
+
+    return reply.send({ list: { ...list, color } });
   });
 
   // Delete list
