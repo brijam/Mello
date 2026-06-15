@@ -15,6 +15,11 @@ export default function MobileListMenu({ list, onClose }: ListMenuProps) {
   const deleteList = useBoardStore((s) => s.deleteList);
   const [mode, setMode] = useState<'menu' | 'rename' | 'color' | 'confirmDelete'>('menu');
   const [nameValue, setNameValue] = useState(list.name);
+  // Staged color selection: the picker only updates this draft; nothing is
+  // persisted until the user taps Save. This gives the picker an explicit
+  // confirm step and avoids the native color input firing a save+close on
+  // every intermediate value (which made custom colors save unreliably).
+  const [colorDraft, setColorDraft] = useState<string | null>(list.color);
 
   const close = () => onClose();
 
@@ -39,7 +44,10 @@ export default function MobileListMenu({ list, onClose }: ListMenuProps) {
           />
           <ActionRow
             label="Change color"
-            onClick={() => setMode('color')}
+            onClick={() => {
+              setColorDraft(list.color);
+              setMode('color');
+            }}
             icon={
               <span
                 style={{
@@ -125,33 +133,37 @@ export default function MobileListMenu({ list, onClose }: ListMenuProps) {
             }}
           >
             {LIST_COLOR_PRESETS.map((c) => {
-              const isActive = list.color?.toLowerCase() === c.toLowerCase();
+              const isActive = colorDraft?.toLowerCase() === c.toLowerCase();
               return (
                 <ColorSwatch
                   key={c}
                   color={c}
                   active={isActive}
-                  onClick={async () => {
-                    // Clicking the active color clears it back to no color.
-                    await updateList(list.id, { color: isActive ? null : c });
-                    close();
-                  }}
+                  // Tapping the selected color again clears it back to no color.
+                  onClick={() => setColorDraft(isActive ? null : c)}
                 />
               );
             })}
             <CustomColorSwatch
               active={
-                !!list.color &&
-                !LIST_COLOR_PRESETS.some((c) => c.toLowerCase() === list.color!.toLowerCase())
+                !!colorDraft &&
+                !LIST_COLOR_PRESETS.some((c) => c.toLowerCase() === colorDraft!.toLowerCase())
               }
-              current={list.color ?? '#5BA8FF'}
-              onPick={async (hex) => {
-                await updateList(list.id, { color: hex });
-                close();
-              }}
+              current={colorDraft ?? '#5BA8FF'}
+              onPick={(hex) => setColorDraft(hex)}
             />
           </div>
-          <CancelRow onClick={() => setMode('menu')} label="Back" />
+          <div style={{ display: 'flex', gap: 8, padding: '4px 18px 16px' }}>
+            <PrimaryButton
+              onClick={async () => {
+                await updateList(list.id, { color: colorDraft });
+                close();
+              }}
+            >
+              Save
+            </PrimaryButton>
+            <SecondaryButton onClick={() => setMode('menu')}>Back</SecondaryButton>
+          </div>
         </>
       )}
 

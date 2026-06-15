@@ -307,10 +307,21 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
       setSection('main');
       return;
     }
-    await api.post(`/cards/${card.id}/move`, { listId: targetListId, position: 65536 });
-    useBoardStore.getState().moveCardLocally(card.id, card.listId, targetListId, 0);
+    // Always drop the card at the top of the destination list. Compute the
+    // position locally (index 0, same as the board view's drag logic) and send
+    // that exact value to the server — a hardcoded 65536 collided with the
+    // existing top card (every list's first card is exactly 65536), so ordering
+    // came out inconsistent.
+    const newPosition = useBoardStore
+      .getState()
+      .moveCardLocally(card.id, card.listId, targetListId, 0);
     setCard((prev) => (prev ? { ...prev, listId: targetListId } : prev));
     setSection('main');
+    try {
+      await api.post(`/cards/${card.id}/move`, { listId: targetListId, position: newPosition });
+    } catch {
+      await useBoardStore.getState().fetchBoard(card.boardId);
+    }
   }
 
   async function toggleLabel(labelId: string, currentlyOn: boolean) {
@@ -402,16 +413,6 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
         fontFamily: MOBILE_FONT_STACK,
       }}
     >
-      <div
-        style={{
-          width: 36,
-          height: 4,
-          background: D.hair3,
-          borderRadius: 2,
-          margin: '8px auto 4px',
-          flexShrink: 0,
-        }}
-      />
       <header
         style={{
           display: 'flex',
@@ -1071,7 +1072,7 @@ export default function MobileCardSheet({ cardId, onClose }: MobileCardSheetProp
               label={l.name}
               selected={l.id === card.listId}
               onClick={() => moveToList(l.id)}
-              swatch={l.color ?? undefined}
+              swatch={l.color ?? D.mute}
             />
           ))}
         </SubScreen>
