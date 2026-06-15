@@ -565,7 +565,6 @@ export default function MobileBoardView({
         actions={[
           common.boards(),
           common.notifications(),
-          common.search(),
           {
             key: 'add',
             label: 'New card',
@@ -573,6 +572,7 @@ export default function MobileBoardView({
             variant: 'primary',
             onClick: () => activeList && setShowNewCard(true),
           },
+          common.search(),
           {
             key: 'list',
             label: 'List',

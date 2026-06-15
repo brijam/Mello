@@ -53,7 +53,9 @@ export default function MobileBottomBar({ actions }: MobileBottomBarProps) {
             ? D.sky
             : a.variant === 'danger'
               ? D.danger
-              : D.mute;
+              : a.variant === 'primary'
+                ? D.sky
+                : D.mute;
           return (
             <button
               key={a.key}
