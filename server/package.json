@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node dist/index.js",
     "migrate": "drizzle-kit migrate",
+    "migrate:apply": "tsx src/scripts/apply-migration.ts",
     "generate": "drizzle-kit generate",
     "test": "vitest run",
     "test:watch": "vitest"
