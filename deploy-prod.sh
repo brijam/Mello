@@ -23,7 +23,7 @@ Steps (each is idempotent — safe to re-run):
   1. ./backup-prod.sh --db-only   (unless --skip-backup)
   2. npm ci                       (unless --skip-install; clean install from committed lockfile)
   3. wipe dist + npm run build    (unless --skip-build; clean rebuild, asserts client bundle emitted)
-  4. drizzle-kit migrate          (unless --skip-migrate; only applies new migrations)
+  4. npm run migrate:apply --all  (unless --skip-migrate; applies pending migrations, tracked in _manual_migrations)
   5. systemctl restart \$SERVICE_NAME
 
 Pull the repo before running:
@@ -105,10 +105,19 @@ if [[ "$SKIP_MIGRATE" != "1" ]]; then
   # Mask credentials when echoing the target so the journal/log shows host+db
   # but not the password.
   DB_REDACTED="$(printf '%s' "$DATABASE_URL" | sed -E 's#//[^@]*@#//***@#')"
-  echo "==> drizzle-kit migrate -> ${DB_REDACTED}"
-  # Pass DATABASE_URL explicitly so drizzle-kit can't silently use its localhost
+  echo "==> apply pending migrations -> ${DB_REDACTED}"
+  # NOT drizzle-kit migrate: its journal (db/migrations/meta/_journal.json) is
+  # out of sync with the SQL files (0001 missing, idx gaps), so it silently
+  # skips migrations — that is how prod ended up missing 0006_per_user_colors
+  # and serving zero boards. apply-migration.ts ignores that journal and tracks
+  # applied migrations in its own _manual_migrations table.
+  #
+  # One-time before the first deploy with this step, seed the tracker to prod's
+  # current schema point so the non-idempotent early migrations aren't re-run:
+  #   cd server && npm run migrate:apply -- --baseline <last-applied-tag>
+  # Pass DATABASE_URL explicitly so the runner can't fall back to its localhost
   # default even if the subshell loses the exported env.
-  (cd server && DATABASE_URL="$DATABASE_URL" npx drizzle-kit migrate)
+  (cd server && DATABASE_URL="$DATABASE_URL" npm run migrate:apply -- --all)
 fi
 
 echo "==> Restarting ${SERVICE_NAME}"
