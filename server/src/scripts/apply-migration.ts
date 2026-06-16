@@ -16,39 +16,48 @@ import { config } from '../config.js';
 // Usage:
 //   tsx src/scripts/apply-migration.ts <tag> [<tag> ...]   apply named migrations
 //   tsx src/scripts/apply-migration.ts --all               apply every pending migration
-//   tsx src/scripts/apply-migration.ts --baseline <tag>    mark <= <tag> as applied without running
 //
-// Examples:
-//   # the per-user colors hotfix
-//   DATABASE_URL=postgres://... tsx src/scripts/apply-migration.ts 0006_per_user_colors
-//   # one-time seed of an existing DB whose schema is already at 0005
-//   DATABASE_URL=postgres://... tsx src/scripts/apply-migration.ts --baseline 0005_list_color_and_board_accent
+// Example:
+//   DATABASE_URL=postgres://... tsx src/scripts/apply-migration.ts --all
 //
-// Each migration is applied once, inside a transaction, and recorded. Re-runs
-// are no-ops, so `--all` is safe to leave in the deploy step. The older
-// migrations are NOT all idempotent (0000 is a bare CREATE TABLE), so on an
-// existing database you MUST `--baseline` to the current schema point before
-// the first `--all`, or the runner will try to re-create tables that exist.
+// `--all` is safe to run against ANY database — fresh or already-populated —
+// with no baseline step. Each statement runs inside a savepoint; if it fails
+// only because the object already exists, that statement is skipped and the
+// migration is recorded as applied (auto-baseline). Missing objects are still
+// created. Any OTHER error aborts the whole run, so genuine migration failures
+// are never swallowed. Already-recorded migrations are skipped outright, so
+// re-running is a no-op — fine to leave in the deploy step.
 
 const argv = process.argv.slice(2);
 const applyAll = argv.includes('--all');
-const baselineIdx = argv.indexOf('--baseline');
-const baselineTag =
-  baselineIdx !== -1 ? argv[baselineIdx + 1]?.replace(/\.sql$/, '') : undefined;
-const explicitTags = argv
-  .filter((a, i) => !a.startsWith('--') && i !== baselineIdx + 1)
-  .map((t) => t.replace(/\.sql$/, ''));
+const explicitTags = argv.filter((a) => !a.startsWith('--')).map((t) => t.replace(/\.sql$/, ''));
 
-if (baselineIdx !== -1 && !baselineTag) {
-  console.error('--baseline requires a tag, e.g. --baseline 0005_list_color_and_board_accent');
-  process.exit(1);
-}
-if (!applyAll && baselineIdx === -1 && explicitTags.length === 0) {
-  console.error('Usage: tsx src/scripts/apply-migration.ts <tag> [...] | --all | --baseline <tag>');
+if (!applyAll && explicitTags.length === 0) {
+  console.error('Usage: tsx src/scripts/apply-migration.ts <tag> [...] | --all');
   process.exit(1);
 }
 
 const migrationsDir = path.resolve(fileURLToPath(import.meta.url), '../../db/migrations');
+
+// SQLSTATE codes meaning "this object already exists" — the only failures we
+// treat as already-applied rather than fatal. Everything else aborts.
+const ALREADY_EXISTS = new Set([
+  '42P07', // duplicate_table (also index / view / sequence — any relation)
+  '42710', // duplicate_object (constraint, trigger, enum value, ...)
+  '42701', // duplicate_column
+  '42P06', // duplicate_schema
+  '42723', // duplicate_function
+  '42P04', // duplicate_database
+]);
+
+function alreadyExists(err: unknown): boolean {
+  return (
+    typeof err === 'object' &&
+    err !== null &&
+    'code' in err &&
+    ALREADY_EXISTS.has(String((err as { code: unknown }).code))
+  );
+}
 
 /** All migration tags in lexical (= numeric, they are zero-padded) order. */
 async function allTags(): Promise<string[]> {
@@ -70,20 +79,6 @@ async function main() {
       "applied_at" timestamp with time zone DEFAULT now() NOT NULL
     )
   `;
-
-  // Baseline mode: record everything up to and including <tag> as applied,
-  // WITHOUT executing it (the schema is assumed to already be at that point).
-  if (baselineTag) {
-    const tags = (await allTags()).filter((t) => t <= baselineTag);
-    if (!tags.includes(baselineTag)) {
-      console.error(`! no migration file matches baseline tag: ${baselineTag}`);
-      process.exit(1);
-    }
-    const rows = tags.map((tag) => ({ tag }));
-    await sql`INSERT INTO "_manual_migrations" ${sql(rows, 'tag')} ON CONFLICT DO NOTHING`;
-    console.log(`= baselined ${tags.length} migration(s) up to ${baselineTag} (not executed)`);
-    return;
-  }
 
   const tags = applyAll ? await allTags() : explicitTags;
 
@@ -110,14 +105,35 @@ async function main() {
       .map((s) => s.trim())
       .filter((s) => s.length > 0);
 
+    let created = 0;
+    let present = 0;
+
+    // One transaction per migration. Each statement gets its own savepoint so
+    // an "already exists" failure can be rolled back individually and the rest
+    // of the migration still runs (handles fully- or partially-applied DBs).
     await sql.begin(async (tx) => {
       for (const statement of statements) {
-        await tx.unsafe(statement);
+        try {
+          await tx.savepoint((sp) => sp.unsafe(statement));
+          created++;
+        } catch (err) {
+          if (alreadyExists(err)) {
+            present++;
+          } else {
+            throw err; // real failure — roll the whole migration back and abort
+          }
+        }
       }
       await tx.unsafe('INSERT INTO "_manual_migrations" ("tag") VALUES ($1)', [tag]);
     });
 
-    console.log(`+ applied ${tag} (${statements.length} statement(s))`);
+    if (created > 0 && present === 0) {
+      console.log(`+ applied ${tag} (${created} statement(s))`);
+    } else if (created === 0) {
+      console.log(`~ ${tag} already present (${present} statement(s)); recorded as baseline`);
+    } else {
+      console.log(`+ reconciled ${tag} (${created} new, ${present} already present)`);
+    }
   }
 }
 

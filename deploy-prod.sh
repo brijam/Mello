@@ -110,13 +110,11 @@ if [[ "$SKIP_MIGRATE" != "1" ]]; then
   # out of sync with the SQL files (0001 missing, idx gaps), so it silently
   # skips migrations — that is how prod ended up missing 0006_per_user_colors
   # and serving zero boards. apply-migration.ts ignores that journal and tracks
-  # applied migrations in its own _manual_migrations table.
-  #
-  # One-time before the first deploy with this step, seed the tracker to prod's
-  # current schema point so the non-idempotent early migrations aren't re-run:
-  #   cd server && npm run migrate:apply -- --baseline <last-applied-tag>
-  # Pass DATABASE_URL explicitly so the runner can't fall back to its localhost
-  # default even if the subshell loses the exported env.
+  # applied migrations in its own _manual_migrations table. --all is safe on a
+  # fresh OR already-populated DB with no baseline step (it auto-reconciles
+  # already-existing objects and aborts on any genuine error). Pass DATABASE_URL
+  # explicitly so the runner can't fall back to its localhost default even if
+  # the subshell loses the exported env.
   (cd server && DATABASE_URL="$DATABASE_URL" npm run migrate:apply -- --all)
 fi
 
